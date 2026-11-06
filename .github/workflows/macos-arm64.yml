@@ -37,7 +37,7 @@ jobs:
         run: bun cmd/ng-build.ts -mac -rel SumatraPDF
       - name: Package app
         run: |
-          lipo -verify_arch arm64 out/mac/rel/SumatraPDF.app/Contents/MacOS/SumatraPDF
+          lipo out/mac/rel/SumatraPDF.app/Contents/MacOS/SumatraPDF -verify_arch arm64
           codesign --verify --deep --strict out/mac/rel/SumatraPDF.app
           ditto -c -k --sequesterRsrc --keepParent out/mac/rel/SumatraPDF.app SumatraPDF-macOS-arm64.zip
           shasum -a 256 SumatraPDF-macOS-arm64.zip > SumatraPDF-macOS-arm64.zip.sha256
