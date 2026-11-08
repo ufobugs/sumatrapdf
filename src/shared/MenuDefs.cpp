@@ -276,6 +276,14 @@ MenuDef menuDefView[] = {
         CmdShowWholePages,
     },
     {
+        TrN("Read &Columns"),
+        CmdToggleReadColumns,
+    },
+    {
+        TrN("Read Columns: Show &Whole Page"),
+        CmdToggleColumnsWholePage,
+    },
+    {
         StrL(kMenuSeparator),
         0,
     },
@@ -554,10 +562,6 @@ MenuDef menuDefThemes[] = {
 
 //[ ACCESSKEY_GROUP Settings Menu
 MenuDef menuDefSettings[] = {
-#if 0
-    { TrN("Contribute Translation"),       CmdContributeTranslation },
-    { StrL(kMenuSeparator),                       0                  },
-#endif
     {
         TrN("&Settings..."),
         CmdOptions,
@@ -621,6 +625,10 @@ MenuDef menuDefFavorites[] = {
     {
         TrN("Show Favorites in Tab"),
         CmdFavoriteShowInTab,
+    },
+    {
+        TrN("Edit Favorites..."),
+        CmdEditFavorites,
     },
     {
         StrL(kMenuSeparator),
@@ -707,6 +715,10 @@ MenuDef menuDefDebug[] = {
     {
         StrL("Show crash minidumps"),
         CmdDebugShowCrashMiniDumps,
+    },
+    {
+        StrL("Show downloaded fonts"),
+        CmdDebugShowDownloadedFonts,
     },
     {
         {},
@@ -1143,7 +1155,7 @@ MenuDef menuDefDocumentOperations[] = {
         CmdConvertToPDF,
     },
     {
-        TrN("Convert PDF to Images..."),
+        TrN("Convert to Images..."),
         CmdConvertPdfToImages,
     },
     {
@@ -1321,6 +1333,14 @@ MenuDef menuDefContextToc[] = {
         CmdTocCollapseSameLevel,
     },
     {
+        TrN("Expand Chapter"),
+        CmdTocExpandChapter,
+    },
+    {
+        TrN("Collapse Chapter"),
+        CmdTocCollapseChapter,
+    },
+    {
         TrN("Expand to Current Page"),
         CmdExpandToCurrentPage,
     },
@@ -1363,6 +1383,10 @@ MenuDef menuDefContextFav[] = {
     {
         TrN("Sort By Name"),
         CmdToggleFavoritesSort,
+    },
+    {
+        TrN("Edit Favorites..."),
+        CmdEditFavorites,
     },
     {
         StrL(kMenuSeparator),

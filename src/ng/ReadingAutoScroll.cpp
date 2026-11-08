@@ -66,12 +66,13 @@ void StopMiddleClickScroll(MainWindow* win) {
 // ng: orig arms / kills a 10 ms WM_TIMER; the shell ticks unconditionally, so
 // "armed" is just the per-tab state the tick reads. What is left of the two is
 // resetting the time base and the sub-pixel accumulator.
-void ArmReadingTimer(MainWindow*, WindowTab* tab) {
+void ArmReadingTimer(MainWindow* win, WindowTab* tab) {
     if (!tab) {
         return;
     }
     tab->autoScroll.lastQpc = 0;
     tab->autoScroll.accum = 0;
+    AppShellRequestFastTick(win);
 }
 
 void KillReadingTimer(MainWindow*) {}
@@ -165,14 +166,7 @@ void ReadingAutoScrollView::OnSpeedMove(ReadingAutoScrollView* self, gp::Ctx* cx
 }
 
 void ReadingAutoScrollView::OnSpeedHover(ReadingAutoScrollView* self, gp::Ctx* cx, const gp::HoverEvent* ev) {
-    if (ev->hovered) {
-        return;
-    }
-    if (BarWindowOf(self->win, cx)) {
-        HoverTooltipHideIn(self->win->gpuiWin);
-        return;
-    }
-    HoverTooltipHide(cx);
+    HoverTooltipHideBar(self->win->gpuiWin, ev->hovered, BarWindowOf(self->win, cx) != nullptr, cx);
 }
 
 ReadingAutoScrollBar* BarEnsure(MainWindow* win) {
@@ -316,7 +310,7 @@ static gp::El* BarRowBuild(MainWindow* win, gp::Ctx* cx, bool ownWindow) {
         }
     }
 
-    bool paused = tab->autoScroll.paused || tab->autoScroll.atEnd;
+    bool paused = tab->autoScroll.IsStopped();
     float margin = (float)DpiScale(kBarMargin);
     float gap = (float)DpiScale(kBtnGap);
     const gp::Theme& th = gp::ThemeNow(cx->app);
@@ -389,8 +383,8 @@ TempStr ReadingAutoScrollBarStateTemp(int* exitCodeOut) {
     hwnd = (int)(uintptr_t)MainWindowHwnd(win);
 #endif
     out.Append(fmt("OK visible=1 paused=%d atEnd=%d dir=%d speed=%d scrollY=%d page=%d pages=%d hwnd=%d\n",
-                   (int)tab->autoScroll.paused, (int)tab->autoScroll.atEnd, tab->autoScroll.dir,
-                   (int)(CurrentSpeed(tab) + 0.5f), scrollY, page, pages, hwnd));
+                   (int)tab->autoScroll.IsStopped(), (int)(tab->autoScroll.stop == AutoScrollStop::AtEnd),
+                   tab->autoScroll.dir, (int)(CurrentSpeed(tab) + 0.5f), scrollY, page, pages, hwnd));
     out.Append(fmt("speedIdx=%d speedCount=%d label=%s\n", ClosestSpeedIdx(CurrentSpeed(tab)), SpeedCount(),
                    SpeedLabelTemp(tab)));
     out.Append(fmt("status=%s\n", StatusTextTemp(tab)));

@@ -90,6 +90,9 @@
 #include "AIChatPanel.h"
 #include "gui/DialogWidgets.h"
 #include "StressTesting.h"
+#include "SumatraConfig.h"
+
+#include "SumatraLog.h"
 
 // every command goes through one gpui action, with the command id as its
 // argument. The bindings carry a key context so a menu row does not pick up
@@ -121,8 +124,6 @@ struct ShellView {
     int menuKey = 0;
     int menuArmedIdx = -1;
     bool menuBarTemp = false;
-    // a click that armed the bar is still being dispatched
-    bool menuArmedByClick = false;
     // a dialog, the palette or the annotation list was built last frame: orig
     // gives each a window of its own, which has the keyboard while it is up
     bool overlayUp = false;
@@ -134,6 +135,13 @@ struct ShellView {
     // when the last tick ran (gp::TimeNow) and the sub-millisecond carry
     double lastTickTime = 0;
     double tickMsRest = 0;
+    // 16 ms while something is moving, 100 ms while the window is idle.
+    // Rearming happens off the timer callback: cancelling the timer that is
+    // firing shifts the window's other timers under the dispatch loop.
+    int tickTimer = 0;
+    int tickMs = 0;
+    int tickWanted = 0;
+    bool tickRearmPosted = false;
 
     static gp::El* Render(ShellView* self, gp::Ctx* cx);
     static void OnCmd(ShellView* self, gp::Ctx* cx, const gp::ActionEvent* ev);
@@ -143,6 +151,7 @@ struct ShellView {
     static void OnSystemMenuDown(ShellView* self, gp::Ctx* cx, const gp::MouseDownEvent*);
     static void OnSystemMenuDrag(ShellView* self, gp::Ctx* cx, const gp::DragMoveEvent* ev);
     static void OnTick(ShellView* self, gp::Ctx* cx, const gp::TickEvent* ev);
+    static void OnRearmTick(ShellView* self, gp::Ctx* cx, const gp::TickEvent*);
     static void OnMouseDown(ShellView* self, gp::Ctx* cx, const gp::MouseDownEvent* ev);
     static void OnKeyDown(ShellView* self, gp::Ctx* cx, const gp::KeyEvent* ev);
     static void OnKeyUp(ShellView* self, gp::Ctx* cx, const gp::KeyEvent* ev);
@@ -249,7 +258,7 @@ void SetTabsInTitlebar(MainWindow* win, bool inTitleBar) {
         return;
     }
     win->tabsInTitlebar = inTitleBar;
-    if (!win->isFullScreen && !win->presentation) {
+    if (!win->IsFullScreenOrPresentation()) {
         AppShellSetClientTitleBar(win, inTitleBar);
         AppShellFrameChanged(win);
     }
@@ -257,7 +266,7 @@ void SetTabsInTitlebar(MainWindow* win, bool inTitleBar) {
 }
 
 static bool ShowCaption(MainWindow* win) {
-    return win->tabsInTitlebar && !win->presentation && !win->isFullScreen;
+    return win->tabsInTitlebar && !win->IsFullScreenOrPresentation();
 }
 
 // orig's SyncCaptionLayout sizes: the window buttons span the padding above
@@ -799,7 +808,7 @@ TempStr AppShellUiStateTemp(MainWindow* win) {
                    view ? view->menuArmedIdx : -1, win->isMenuBarVisible ? 1 : 0, view && view->menuBarTemp ? 1 : 0));
     out.Append(fmt(" page=%d findUI=%d selection=%d annotSel=%d presentation=%d fullscreen=%d mouseAction=%d",
                    win->ctrl ? win->ctrl->CurrentPageNo() : 0, IsFindUIVisible(win) ? 1 : 0, win->showSelection ? 1 : 0,
-                   tab && tab->selectedAnnotation ? 1 : 0, (int)win->presentation, win->isFullScreen ? 1 : 0,
+                   tab && tab->selectedAnnotation ? 1 : 0, (int)win->InPresentation(), win->IsFullScreen() ? 1 : 0,
                    (int)win->mouseAction));
     int tocItems = 0;
     if (win->ctrl) {
@@ -1306,10 +1315,30 @@ extern "C" EMSCRIPTEN_KEEPALIVE void sumatra_wasm_open_dropped() {
 // sees. A no-op when the app left it, as it exits its mode first.
 extern "C" EMSCRIPTEN_KEEPALIVE void sumatra_wasm_fullscreen_left() {
     for (MainWindow* win : gWindows) {
-        if (win->isFullScreen || win->InPresentation()) {
+        if (win->IsFullScreenOrPresentation()) {
             ExitFullScreen(win);
         }
     }
+}
+
+// the version and git commit, for a crash report (WasmShell.js asks at startup)
+extern "C" EMSCRIPTEN_KEEPALIVE const char* sumatra_wasm_build_info() {
+    static char* info = nullptr;
+    if (!info) {
+        info = str::Dup(fmt("%s %s", currentVersion, gitCommidId)).s;
+    }
+    return info;
+}
+
+// The log, for a crash report. WasmShell.js reads them right after a trap, when
+// the module's state can't be trusted: they only read globals (no lock, no
+// allocation, no stack).
+extern "C" EMSCRIPTEN_KEEPALIVE const char* sumatra_wasm_log_data() {
+    return gLogBuf ? gLogBuf->els : nullptr;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE int sumatra_wasm_log_len() {
+    return gLogBuf ? (int)gLogBuf->len : 0;
 }
 
 // a save to OPFS failed: the document or setting is only in this tab
@@ -1562,18 +1591,6 @@ void AppShellSyncMenu(MainWindow* win) {
     gMenuDirty = false;
     gMenuOwner = win;
     gMenuVis = true;
-}
-
-// Windows underlines the access keys always or only once Alt was pressed
-// ("Underline access keys when available", off by default)
-static bool MenuCuesAlways() {
-#if OS_WIN
-    BOOL on = FALSE;
-    SystemParametersInfoW(SPI_GETKEYBOARDCUES, 0, &on, 0);
-    return on != FALSE;
-#else
-    return false;
-#endif
 }
 
 // the label with orig's '&' letter underlined
@@ -1991,7 +2008,7 @@ static bool HasNotificationsFor(MainWindow* win);
 // SidebarAutoHide (#5819): a shown sidebar floats over the canvas instead of
 // taking a column. Not in presentation.
 bool AppShellSidebarFloats(MainWindow* win) {
-    if (!gSettings->sidebarAutoHide || win->presentation) {
+    if (!gSettings->sidebarAutoHide || win->InPresentation()) {
         return false;
     }
     return win->uiState.tocVisible || win->uiState.favVisible;
@@ -2534,16 +2551,21 @@ void ShellView::OnMouseDown(ShellView* self, gp::Ctx* cx, const gp::MouseDownEve
     // (a click on the bar itself opens a menu)
     bool onMenuBar =
         (self->win->isMenuBarVisible || self->menuBarTemp) && !gp::AppHasMenuBar() && ev->y < (float)kMenuBarDy;
-    if (self->menuArmedIdx >= 0 && !onMenuBar && !self->menuArmedByClick) {
+    if (self->menuArmedIdx >= 0 && !onMenuBar) {
         self->menuArmedIdx = -1;
         gp::Notify(cx);
     }
-    self->menuArmedByClick = false;
     // orig's WM_APPCOMMAND: the mouse's back / forward buttons, anywhere in
-    // the frame
+    // the frame. A Shortcut can rebind them ("Ctrl + XButton1").
     if (ev->button == gp::MouseButton::NavigateBack || ev->button == gp::MouseButton::NavigateForward) {
         if (IsMainWindowValidAndNotClosing(self->win)) {
-            ExecuteCmd(self->win, ev->button == gp::MouseButton::NavigateBack ? CmdNavigateBack : CmdNavigateForward);
+            bool isBack = ev->button == gp::MouseButton::NavigateBack;
+            const gp::Modifiers& m = ev->modifiers;
+            int cmd = AcceleratorCmd(isBack ? VK_XBUTTON1 : VK_XBUTTON2, m.control, m.shift, m.alt, m.platform);
+            if (!cmd) {
+                cmd = isBack ? CmdNavigateBack : CmdNavigateForward;
+            }
+            ExecuteCmd(self->win, cmd);
             gp::Notify(cx);
         }
         return;
@@ -2839,10 +2861,10 @@ void ShellView::OnKeyDown(ShellView* self, gp::Ctx* cx, const gp::KeyEvent* ev) 
     }
     // orig's FrameOnKeydown / FrameOnChar: a black or white presentation screen
     // swallows a key that is not an accelerator and goes back to the slide
-    if (PM_BLACK_SCREEN == win->presentation || PM_WHITE_SCREEN == win->presentation) {
+    if (win->InBlankPresentation()) {
         if (SafeAcceleratorCmd((u16)ev->vk, ev->ctrl, ev->shift, ev->alt, ev->platform) == 0) {
             if (ev->vk == VK_ESCAPE || (ev->vk == 0 && ev->ch != 0)) {
-                win->ChangePresentationMode(PM_ENABLED);
+                win->ChangePresentationMode(WindowMode::Presentation);
             }
             mut->propagate = false;
             gp::Notify(cx);
@@ -2905,7 +2927,7 @@ void ShellView::OnKeyDown(ShellView* self, gp::Ctx* cx, const gp::KeyEvent* ev) 
                 DeleteOldSelectionInfo(win, true);
                 ClearSearchResult(win); // repaints; also drops any find-match highlights
                 ToolbarUpdateStateForWindow(win, false);
-            } else if (win->InPresentation() || win->isFullScreen) {
+            } else if (win->IsFullScreenOrPresentation()) {
                 // orig's OnFrameKeyEsc: Escape leaves the mode it put us in
                 ToggleFullScreen(win, win->InPresentation());
             } else if (!win->pdfAnnotationsToolbarEnabled && gSettings->escToExit) {
@@ -3122,6 +3144,57 @@ static void ApplyRenderScale(MainWindow* win) {
 }
 #endif
 
+// A page that is still painting, a wheel animation, a drag-scroll and a
+// running reading auto-scroll need a frame cadence. Everything else the
+// tick drives (notification expiry, hover delays, caption reveal) is fine
+// at 100 ms, and that is what an idle window was spending its wakes on.
+static constexpr int kShellTickFastMs = 16;
+static constexpr int kShellTickIdleMs = 100;
+
+static bool ShellTickIsHot(MainWindow* win) {
+    MouseAction ma = win->mouseAction;
+    if (ma == MouseAction::Scrolling || ma == MouseAction::Selecting || ma == MouseAction::SelectingText) {
+        return true;
+    }
+    if (win->scrollAnimActive || win->repaintPending) {
+        return true;
+    }
+    WindowTab* tab = win->CurrentTab();
+    return tab && tab->autoScroll.on && !tab->autoScroll.IsStopped();
+}
+
+static void ShellApplyTickPace(ShellView* self, gp::Window* gw, int ms) {
+    if (!self || !gw || ms <= 0) {
+        return;
+    }
+    if (self->tickTimer && self->tickMs == ms) {
+        return;
+    }
+    if (self->tickTimer) {
+        gp::WindowCancelTimer(gw, self->tickTimer);
+        self->tickTimer = 0;
+    }
+    self->tickMs = ms;
+    self->tickTimer = gp::WindowSetInterval(gw, ms, gp::ListenTo(ShellViewOf(self->win), &ShellView::OnTick));
+}
+
+void ShellView::OnRearmTick(ShellView* self, gp::Ctx* cx, const gp::TickEvent*) {
+    self->tickRearmPosted = false;
+    ShellApplyTickPace(self, cx->win, self->tickWanted);
+}
+
+void AppShellRequestFastTick(MainWindow* win) {
+    if (!win || !win->shell || !win->gpuiWin) {
+        return;
+    }
+    ShellView* self = (ShellView*)gp::EntityGet(win->gpuiWin->app, win->shell->view.id);
+    if (!self || self->tickMs == kShellTickFastMs) {
+        return;
+    }
+    self->tickWanted = kShellTickFastMs;
+    ShellApplyTickPace(self, win->gpuiWin, kShellTickFastMs);
+}
+
 void ShellView::OnTick(ShellView* self, gp::Ctx* cx, const gp::TickEvent* ev) {
     uitask::DrainQueue();
     AppShellReapClosedWindows();
@@ -3172,6 +3245,12 @@ void ShellView::OnTick(ShellView* self, gp::Ctx* cx, const gp::TickEvent* ev) {
             gp::Notify(cx);
         }
     }
+    // orig pauses auto-scroll from WM_SIZE; ng has no minimize event, so watch for one
+    bool minimized = gp::AppIsMinimized(win->gpuiWin);
+    if (minimized != win->wasMinimized) {
+        win->wasMinimized = minimized;
+        ReadingAutoScrollOnMinimize(win, minimized);
+    }
     ToolbarTick(win, ms);
     AutoReloadTick(win, ms);
     DocCanvasAutoScrollTick(win, ms);
@@ -3193,8 +3272,15 @@ void ShellView::OnTick(ShellView* self, gp::Ctx* cx, const gp::TickEvent* ev) {
     if (!IsMainWindowValidAndNotClosing(win)) {
         return;
     }
-    if (DocCanvasWantsRepaint(win)) {
+    bool repaint = DocCanvasWantsRepaint(win);
+    if (repaint) {
         gp::Notify(cx);
+    }
+    int want = (repaint || ShellTickIsHot(win)) ? kShellTickFastMs : kShellTickIdleMs;
+    if (want != self->tickMs && !self->tickRearmPosted) {
+        self->tickWanted = want;
+        self->tickRearmPosted = true;
+        gp::WindowPost(cx->win, gp::ListenTo(ShellViewOf(win), &ShellView::OnRearmTick));
     }
 }
 
@@ -3331,7 +3417,7 @@ Rect AppShellPredictCanvasRc(MainWindow* win, CanvasPredict predict) {
         return {};
     }
     bool tabsVisible = TabsAreVisible(win);
-    if (predict == CanvasPredict::DocumentTab && SettingsUseTabs() && !win->isQuickLook && !win->isFullScreen &&
+    if (predict == CanvasPredict::DocumentTab && SettingsUseTabs() && !win->isQuickLook && !win->IsFullScreen() &&
         !win->InPresentation()) {
         tabsVisible = true;
     }
@@ -3538,7 +3624,7 @@ static bool OnWindowShouldClose(void* data, gp::Window*) {
     }
     if (!win->isClosePending) {
         win->isClosePending = true;
-        uitask::Post(MkFunc0(RunWindowCloseRequest, win), "WindowCloseRequest");
+        PostForWindow(win, RunWindowCloseRequest, "WindowCloseRequest");
     }
     return false;
 }
@@ -3587,8 +3673,10 @@ MainWindow* AppShellCreateWindow(gp::App* app, int dipW, int dipH) {
     DocCanvasHookWindow(win, gw);
     OverlayScrollbarHookWindow(gw);
     // ng: orig runs auto-scroll on a 10 ms timer and repaints a rendering page
-    // on a 500 ms one; one interval drives both here
-    gp::WindowSetInterval(gw, 16, gp::ListenTo(ui->view, &ShellView::OnTick));
+    // on a 500 ms one. One interval drives both, fast while something moves
+    // and slow while the window is idle (OnTick rearms).
+    view->tickWanted = kShellTickFastMs;
+    ShellApplyTickPace(view, gw, kShellTickFastMs);
     AppShellEnableFileDrop(win);
     logf("AppShellCreateWindow: window 0x%p, %d windows open\n", win, len(gWindows));
     return win;

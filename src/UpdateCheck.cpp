@@ -89,27 +89,6 @@ PortableZip32: https://www.sumatrapdfreader.org/dl/prerel/14276/SumatraPDF-prere
 ]
 */
 
-static bool ShouldCheckForUpdate(UpdateCheck updateCheckType) {
-    UpdateCheckFacts f;
-    f.inProgress = gUpdateCheckInProgress;
-    // when forcing, we download pre-release, which shows a greater version
-    // than our build, so only a user-initiated check may download it
-#ifdef FORCE_AUTO_UPDATE
-    f.forcePreReleaseOnly = true;
-#endif
-    f.userInitiated = updateCheckType == UpdateCheck::UserInitiated;
-    f.hasInternet = HasPermission(Perm::InternetAccess);
-    f.canSavePrefs = HasPermission(Perm::SavePreferences);
-    f.checkForUpdates = gSettings->checkForUpdates;
-    FILETIME never{};
-    f.firstStart = FileTimeEq(gSettings->timeOfLastUpdateCheck, never);
-    f.isPreRelease = gIsPreReleaseBuild;
-    FILETIME currentTimeFt;
-    GetSystemTimeAsFileTime(&currentTimeFt);
-    f.secsSinceLast = FileTimeDiffInSecs(currentTimeFt, gSettings->timeOfLastUpdateCheck);
-    return DecideUpdateCheck(f) == UpdateCheckChoice::Check;
-}
-
 void StartInstallerAutoUpgrade(Str installerPath) {
     TempStr expectedSigner = GetExecutableSignerTemp(GetSelfExePathTemp());
     TempStr installerSigner = GetExecutableSignerTemp(installerPath);
@@ -342,6 +321,12 @@ void DownloadAndInstallPendingUpdate(MainWindow* win) {
     if (!win || !gPendingUpdate) {
         return;
     }
+    // a check or download is running: it offers the update itself. Starting
+    // a second one ran two downloads, and the first to finish installed
+    // without asking
+    if (gUpdateCheckInProgress) {
+        return;
+    }
     UpdateInfo* updateInfo = gPendingUpdate;
     gPendingUpdate = nullptr;
     gUpdateAutoInstall = true;
@@ -489,13 +474,6 @@ Visit <a href="%s">%s</a> to download the latest version.)",
 }
 
 static DWORD MaybeStartUpdateDownload(HWND hwndParent, HttpRsp* rsp, UpdateCheck updateCheckType) {
-    // for store builds we do update check but ignore the result
-#if 0
-    if (gIsStoreBuild) {
-        return 0;
-    }
-#endif
-
     Str url = rsp->url;
     str::Builder* data = &rsp->data;
     UpdateInfoFetch kind = ClassifyUpdateInfoFetch(url, (int)rsp->error, (int)rsp->httpStatusCode, len(*data),
@@ -675,7 +653,7 @@ static void UpdateCheckAsync(UpdateCheckAsyncData* data) {
 // if autoCheck is true, this is a check *not* triggered by explicit action
 // of the user and therefore will show less UI
 void StartAsyncUpdateCheck(MainWindow* win, UpdateCheck updateCheckType) {
-    if (!ShouldCheckForUpdate(updateCheckType)) {
+    if (!ShouldCheckForUpdate(updateCheckType, gUpdateCheckInProgress)) {
         return;
     }
 

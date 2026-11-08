@@ -17,7 +17,7 @@ static const FieldInfo gReadingBarFields[] = {
 };
 static const StructInfo gReadingBarInfo = {
     sizeof(ReadingBar),
-    3,
+    (u16)dimof(gReadingBarFields),
     gReadingBarFields,
     "Background\0Invert\0Height",
     "fill of the reading bar in highlight mode. #aarrggbb sets opacity (00 = transparent, FF = opaque); #rrggbb is "
@@ -25,6 +25,7 @@ static const StructInfo gReadingBarInfo = {
     "band\0height of the reading bar in pixels at 96 DPI; 0 uses a default of about three lines. dragging the top or "
     "bottom edge of the bar also changes this",
     false};
+static_assert(dimof(gReadingBarFields) == 3);
 
 static const FieldInfo gWindowMarginFields[] = {
     {offsetof(WindowMargin, top), SettingType::Int, 2},
@@ -34,7 +35,7 @@ static const FieldInfo gWindowMarginFields[] = {
 };
 static const StructInfo gWindowMarginInfo = {
     sizeof(WindowMargin),
-    4,
+    (u16)dimof(gWindowMarginFields),
     gWindowMarginFields,
     "Top\0Right\0Bottom\0Left",
     "space between the top of the window and the document, in pixels at 100% display scaling\0space between the right "
@@ -42,18 +43,20 @@ static const StructInfo gWindowMarginInfo = {
     "document, in pixels at 100% display scaling\0space between the left of the window and the document, in pixels at "
     "100% display scaling",
     false};
+static_assert(dimof(gWindowMarginFields) == 4);
 
 static const FieldInfo gSizeFields[] = {
     {offsetof(Size, dx), SettingType::Int, 4},
     {offsetof(Size, dy), SettingType::Int, 4},
 };
 static const StructInfo gSizeInfo = {sizeof(Size),
-                                     2,
+                                     (u16)dimof(gSizeFields),
                                      gSizeFields,
                                      "Dx\0Dy",
                                      "horizontal gap between two pages, in pixels at 100% display scaling\0vertical "
                                      "gap between two pages, in pixels at 100% display scaling",
                                      false};
+static_assert(dimof(gSizeFields) == 2);
 
 static const char* gEnumPageGridStyle[] = {"dots", "dotted", "solid", nullptr};
 static const char* gEnumPageGridUnits[] = {"pt", "in", "mm", "cm", nullptr};
@@ -70,7 +73,7 @@ static const FieldInfo gPageGridFields[] = {
 };
 static const StructInfo gPageGridInfo = {
     sizeof(PageGrid),
-    9,
+    (u16)dimof(gPageGridFields),
     gPageGridFields,
     "Width\0Height\0Subdivisions\0OffsetX\0OffsetY\0Slant\0Color\0Style\0Units",
     "distance between major vertical grid lines, in PDF points (1/72 inch)\0distance between major horizontal grid "
@@ -80,6 +83,7 @@ static const StructInfo gPageGridInfo = {
     "overlay\0grid overlay style: dots (marks at intersections), dotted (dotted lines), or solid\0units shown in the "
     "Configure Page Grid dialog: pt, in, mm, or cm",
     false};
+static_assert(dimof(gPageGridFields) == 9);
 
 static const FieldInfo gFixedPageUIFields[] = {
     {offsetof(FixedPageUI, grayscale), SettingType::Bool, false},
@@ -94,7 +98,7 @@ static const FieldInfo gFixedPageUIFields[] = {
 };
 static const StructInfo gFixedPageUIInfo = {
     sizeof(FixedPageUI),
-    9,
+    (u16)dimof(gFixedPageUIFields),
     gFixedPageUIFields,
     "Grayscale\0TextColor\0BackgroundColor\0SelectionColor\0WindowMargin\0PageSpacing\0GradientColors\0WindowBgCol\0Pag"
     "eGrid",
@@ -111,6 +115,7 @@ static const StructInfo gFixedPageUIInfo = {
     "session-only. Drag a grid line while Configure Page Grid is open, or Alt+drag, to resize cells with equal width "
     "and height",
     false};
+static_assert(dimof(gFixedPageUIFields) == 9);
 
 static const char* gEnumEBookUIDefaultDisplayMode[] = {
     "",           "automatic",         "single page",          "facing",      "book view",
@@ -130,7 +135,7 @@ static const FieldInfo gEBookUIFields[] = {
 };
 static const StructInfo gEBookUIInfo = {
     sizeof(EBookUI),
-    10,
+    (u16)dimof(gEBookUIFields),
     gEBookUIFields,
     "FontName\0FontSize\0Margin\0LineSpacing\0LayoutDx\0LayoutDy\0IgnoreDocumentCSS\0CustomCSS\0WindowBgCol\0DefaultDis"
     "playMode",
@@ -149,6 +154,7 @@ static const StructInfo gEBookUIInfo = {
     "IgnoreDocumentCSS = true if the document's own CSS overrides it\0if given, sets the canvas background color for "
     "ebook documents (epub, mobi etc.)\0default page layout for ebooks; empty uses the global DefaultDisplayMode",
     false};
+static_assert(dimof(gEBookUIFields) == 10);
 
 static const FieldInfo gWindowMargin_1_Fields[] = {
     {offsetof(WindowMargin, top), SettingType::Int, 0},
@@ -158,7 +164,7 @@ static const FieldInfo gWindowMargin_1_Fields[] = {
 };
 static const StructInfo gWindowMargin_1_Info = {
     sizeof(WindowMargin),
-    4,
+    (u16)dimof(gWindowMargin_1_Fields),
     gWindowMargin_1_Fields,
     "Top\0Right\0Bottom\0Left",
     "space between the top of the window and the document, in pixels at 100% display scaling\0space between the right "
@@ -166,18 +172,20 @@ static const StructInfo gWindowMargin_1_Info = {
     "document, in pixels at 100% display scaling\0space between the left of the window and the document, in pixels at "
     "100% display scaling",
     false};
+static_assert(dimof(gWindowMargin_1_Fields) == 4);
 
 static const FieldInfo gSize_1_Fields[] = {
     {offsetof(Size, dx), SettingType::Int, 4},
     {offsetof(Size, dy), SettingType::Int, 4},
 };
 static const StructInfo gSize_1_Info = {sizeof(Size),
-                                        2,
+                                        (u16)dimof(gSize_1_Fields),
                                         gSize_1_Fields,
                                         "Dx\0Dy",
                                         "horizontal gap between two pages, in pixels at 100% display scaling\0vertical "
                                         "gap between two pages, in pixels at 100% display scaling",
                                         false};
+static_assert(dimof(gSize_1_Fields) == 2);
 
 static const char* gEnumComicBookUIDefaultDisplayMode[] = {
     "",           "automatic",         "single page",          "facing",      "book view",
@@ -197,7 +205,7 @@ static const FieldInfo gComicBookUIFields[] = {
 };
 static const StructInfo gComicBookUIInfo = {
     sizeof(ComicBookUI),
-    10,
+    (u16)dimof(gComicBookUIFields),
     gComicBookUIFields,
     "WindowMargin\0PageSpacing\0CbxMangaMode\0WindowBgCol\0LimitToWindowWidth\0LimitToWindowHeight\0AutoRotateWidePages"
     "\0DefaultDisplayMode\0DefaultZoom\0LandscapeAsSpread",
@@ -216,6 +224,7 @@ static const StructInfo gComicBookUIInfo = {
     "book view a landscape page (wider than tall) occupies the whole two-page row instead of pairing with the next "
     "page. For comics that store double-page spreads as one image (issues #1324, #872)",
     false};
+static_assert(dimof(gComicBookUIFields) == 10);
 
 static const FieldInfo gImageUIFields[] = {
     {offsetof(ImageUI, windowBgCol), SettingType::Color, (intptr_t)""},
@@ -226,7 +235,7 @@ static const FieldInfo gImageUIFields[] = {
 };
 static const StructInfo gImageUIInfo = {
     sizeof(ImageUI),
-    5,
+    (u16)dimof(gImageUIFields),
     gImageUIFields,
     "WindowBgCol\0DefaultZoom\0LimitToWindowWidth\0LimitToWindowHeight\0LandscapeAsSpread",
     "if given, sets the canvas background color for image files\0default zoom for image files. valid values: fit page, "
@@ -236,6 +245,7 @@ static const StructInfo gImageUIInfo = {
     "Fit Height)\0if true, in facing and book view a landscape page (wider than tall) occupies the whole two-page row "
     "instead of pairing with the next page (issues #1324, #872)",
     false};
+static_assert(dimof(gImageUIFields) == 5);
 
 static const FieldInfo gChmUIFields[] = {
     {offsetof(ChmUI, useFixedPageUI), SettingType::Bool, false},
@@ -243,13 +253,14 @@ static const FieldInfo gChmUIFields[] = {
 };
 static const StructInfo gChmUIInfo = {
     sizeof(ChmUI),
-    2,
+    (u16)dimof(gChmUIFields),
     gChmUIFields,
     "UseFixedPageUI\0FontName",
     "if true, the UI used for PDF documents will be used for CHM documents as well\0font family for the CHM fixed-page "
     "view (e.g. Segoe UI, Georgia, Microsoft YaHei). empty uses EBookUI.FontName or the engine default. overrides "
     "fonts specified by the document; wrapping quotes are stripped",
     false};
+static_assert(dimof(gChmUIFields) == 2);
 
 static const FieldInfo gMarkdownUIFields[] = {
     {offsetof(MarkdownUI, useFixedPageUI), SettingType::Bool, false},
@@ -257,23 +268,25 @@ static const FieldInfo gMarkdownUIFields[] = {
 };
 static const StructInfo gMarkdownUIInfo = {
     sizeof(MarkdownUI),
-    2,
+    (u16)dimof(gMarkdownUIFields),
     gMarkdownUIFields,
     "UseFixedPageUI\0PreserveLineBreaks",
     "if true, use MuPDF (cmark-gfm) to render markdown; if false, use WebView2 browser view when available\0if true, "
     "preserve source line breaks in the Markdown browser view; false uses standard Markdown paragraph wrapping",
     false};
+static_assert(dimof(gMarkdownUIFields) == 2);
 
 static const FieldInfo gHtmlUIFields[] = {
     {offsetof(HtmlUI, useFixedPageUI), SettingType::Bool, false},
 };
 static const StructInfo gHtmlUIInfo = {
     sizeof(HtmlUI),
-    1,
+    (u16)dimof(gHtmlUIFields),
     gHtmlUIFields,
     "UseFixedPageUI",
     "if true, use MuPDF to render HTML; if false, use WebView2 browser view when available",
     false};
+static_assert(dimof(gHtmlUIFields) == 1);
 
 static const FieldInfo gClaudeCodeFields[] = {
     {offsetof(ClaudeCode, model), SettingType::String, (intptr_t)"sonnet"},
@@ -284,7 +297,7 @@ static const FieldInfo gClaudeCodeFields[] = {
 };
 static const StructInfo gClaudeCodeInfo = {
     sizeof(ClaudeCode),
-    5,
+    (u16)dimof(gClaudeCodeFields),
     gClaudeCodeFields,
     "Model\0Models\0Effort\0SkipPermissions\0BgColor",
     "Claude model alias for --model (e.g. sonnet, opus, haiku); uses opus if not in the model list\0extra Claude model "
@@ -292,6 +305,7 @@ static const StructInfo gClaudeCodeInfo = {
     "level: 0=Low, 1=Medium, 2=High, 3=Max\0if true, pass --dangerously-skip-permissions to Claude Code\0background "
     "color of the Claude Code chat panel",
     false};
+static_assert(dimof(gClaudeCodeFields) == 5);
 
 static const FieldInfo gGrokBuildFields[] = {
     {offsetof(GrokBuild, model), SettingType::String, (intptr_t)"grok-4.5"},
@@ -302,13 +316,14 @@ static const FieldInfo gGrokBuildFields[] = {
 };
 static const StructInfo gGrokBuildInfo = {
     sizeof(GrokBuild),
-    5,
+    (u16)dimof(gGrokBuildFields),
     gGrokBuildFields,
     "Model\0Models\0Effort\0AlwaysApprove\0BgColor",
     "Grok model ID for --model (e.g. grok-4.5)\0extra Grok model IDs for the dropdown, comma-separated; used in "
     "addition to models reported by Grok\0Grok effort level: 0=Low, 1=Medium, 2=High, 3=XHigh, 4=Max\0if true, pass "
     "--always-approve to Grok Build (auto-approve tool executions)\0background color of the Grok Build chat panel",
     false};
+static_assert(dimof(gGrokBuildFields) == 5);
 
 static const FieldInfo gCodexBuildFields[] = {
     {offsetof(CodexBuild, model), SettingType::String, (intptr_t)"gpt-5.5"},
@@ -319,7 +334,7 @@ static const FieldInfo gCodexBuildFields[] = {
 };
 static const StructInfo gCodexBuildInfo = {
     sizeof(CodexBuild),
-    5,
+    (u16)dimof(gCodexBuildFields),
     gCodexBuildFields,
     "Model\0Models\0Sandbox\0SkipSandbox\0BgColor",
     "Codex model ID for -m (e.g. gpt-5.5, gpt-5.4, o3)\0extra Codex model IDs for the dropdown, comma-separated; used "
@@ -327,6 +342,7 @@ static const StructInfo gCodexBuildInfo = {
     "2=danger-full-access\0if true, pass --dangerously-bypass-approvals-and-sandbox to Codex\0background color of the "
     "OpenAI Codex chat panel",
     false};
+static_assert(dimof(gCodexBuildFields) == 5);
 
 static const FieldInfo gAntiGravityFields[] = {
     {offsetof(AntiGravity, model), SettingType::String, (intptr_t)"gemini-3.8-flash-medium"},
@@ -337,7 +353,7 @@ static const FieldInfo gAntiGravityFields[] = {
 };
 static const StructInfo gAntiGravityInfo = {
     sizeof(AntiGravity),
-    5,
+    (u16)dimof(gAntiGravityFields),
     gAntiGravityFields,
     "Model\0Models\0Effort\0AutoApprove\0BgColor",
     "Antigravity model ID for --model (e.g. gemini-3.8-flash-medium)\0extra Antigravity model IDs for the dropdown, "
@@ -345,6 +361,7 @@ static const StructInfo gAntiGravityInfo = {
     "--dangerously-skip-permissions to Antigravity CLI so it can read the current file etc. in headless print mode "
     "(agy cannot prompt for permissions with -p)\0background color of the Antigravity chat panel",
     false};
+static_assert(dimof(gAntiGravityFields) == 5);
 
 static const FieldInfo gAIChatFields[] = {
     {offsetof(AIChat, fontName), SettingType::String, (intptr_t)""},
@@ -355,7 +372,7 @@ static const FieldInfo gAIChatFields[] = {
 };
 static const StructInfo gAIChatInfo = {
     sizeof(AIChat),
-    5,
+    (u16)dimof(gAIChatFields),
     gAIChatFields,
     "FontName\0FontSize\0LineSpacing\0MessagePadding\0Bubbles",
     "font of the chat messages; empty uses Segoe UI\0font size of the chat messages in pixels; 0 means the default "
@@ -363,6 +380,7 @@ static const StructInfo gAIChatInfo = {
     "accepted\0space inside a message box in pixels; -1 means the default (8)\0if true, your questions and the replies "
     "are shown in message boxes; if false, as plain text separated by lines",
     false};
+static_assert(dimof(gAIChatFields) == 5);
 
 static const char* gEnumAnnotationsFreeTextAlignment[] = {"left", "center", "right", nullptr};
 static const char* gEnumAnnotationsTextIconType[] = {"",     "comment",   "help", "insert", "key", "new paragraph",
@@ -402,7 +420,7 @@ static const FieldInfo gAnnotationsFields[] = {
 };
 static const StructInfo gAnnotationsInfo = {
     sizeof(Annotations),
-    27,
+    (u16)dimof(gAnnotationsFields),
     gAnnotationsFields,
     "HighlightColor\0UnderlineColor\0SquigglyColor\0StrikeOutColor\0FreeTextColor\0FreeTextBackgroundColor\0FreeTextOpa"
     "city\0FreeTextSize\0FreeTextBorderWidth\0FreeTextAlignment\0PresetColors\0TextIconColor\0LineColor\0PolyLineColor"
@@ -437,6 +455,7 @@ static const StructInfo gAnnotationsInfo = {
     "Image asks for an image\0font size of the card that shows an annotation's text when it is clicked, in pixels; 0 "
     "uses UIFontSize. Not scaled by the display scaling",
     false};
+static_assert(dimof(gAnnotationsFields) == 27);
 
 static const FieldInfo gExternalViewerFields[] = {
     {offsetof(ExternalViewer, commandLine), SettingType::String, 0},
@@ -448,7 +467,7 @@ static const FieldInfo gExternalViewerFields[] = {
 };
 static const StructInfo gExternalViewerInfo = {
     sizeof(ExternalViewer),
-    6,
+    (u16)dimof(gExternalViewerFields),
     gExternalViewerFields,
     "CommandLine\0Name\0Filter\0Key\0ToolbarText\0ToolbarSvgIcon",
     "command line with which to call the external viewer, may contain %p for page number and \"%1\" for the file name "
@@ -458,6 +477,7 @@ static const StructInfo gExternalViewerInfo = {
     "documents)\0optional: keyboard shortcut e.g. Alt + 7\0if given, shows in toolbar\0optional SVG icon for toolbar "
     "button; if both ToolbarSvgIcon and ToolbarText are set, the icon is used",
     false};
+static_assert(dimof(gExternalViewerFields) == 6);
 
 static const FieldInfo gForwardSearchFields[] = {
     {offsetof(ForwardSearch, highlightOffset), SettingType::Int, 0},
@@ -467,7 +487,7 @@ static const FieldInfo gForwardSearchFields[] = {
 };
 static const StructInfo gForwardSearchInfo = {
     sizeof(ForwardSearch),
-    4,
+    (u16)dimof(gForwardSearchFields),
     gForwardSearchFields,
     "HighlightOffset\0HighlightWidth\0HighlightColor\0HighlightPermanent",
     "if greater than 0, the forward search result is marked with a bar down the left side of the page instead of "
@@ -476,6 +496,7 @@ static const StructInfo gForwardSearchInfo = {
     "forward search highlight\0if true, the highlight stays visible until the next mouse click instead of fading away "
     "after a few seconds",
     false};
+static_assert(dimof(gForwardSearchFields) == 4);
 
 static const char* gEnumPrinterDefaultsPrintScale[] = {"shrink", "fit", "none", nullptr};
 static const char* gEnumPrinterDefaultsCollate[] = {"default", "collate", "nocollate", nullptr};
@@ -485,16 +506,19 @@ static const FieldInfo gPrinterDefaultsFields[] = {
     {offsetof(PrinterDefaults, collate), SettingType::String, (intptr_t)"default", false, gEnumPrinterDefaultsCollate,
      nullptr},
     {offsetof(PrinterDefaults, printDpi), SettingType::Float, (intptr_t)"0"},
+    {offsetof(PrinterDefaults, autoRotate), SettingType::Bool, true},
 };
 static const StructInfo gPrinterDefaultsInfo = {
     sizeof(PrinterDefaults),
-    3,
+    (u16)dimof(gPrinterDefaultsFields),
     gPrinterDefaultsFields,
-    "PrintScale\0Collate\0PrintDpi",
+    "PrintScale\0Collate\0PrintDpi\0AutoRotate",
     "default value for scaling (shrink, fit, none)\0default value for collate in the print dialog (default, collate, "
     "nocollate)\0resolution to assume for the document when printing at original size (e.g. 300 for a 300 dpi scan "
-    "whose file doesn't say); 0 uses the resolution recorded in the file",
+    "whose file doesn't say); 0 uses the resolution recorded in the file\0default for the Print dialog's Rotate wide "
+    "pages to fit the paper: if true, a page wider than it is tall is turned 90° to fill the paper",
     false};
+static_assert(dimof(gPrinterDefaultsFields) == 4);
 
 static const char* gEnumFullscreenToolbar[] = {"", "show", "hide", "overlay", nullptr};
 static const char* gEnumFullscreenDisplayMode[] = {
@@ -510,7 +534,7 @@ static const FieldInfo gFullscreenFields[] = {
 };
 static const StructInfo gFullscreenInfo = {
     sizeof(Fullscreen),
-    4,
+    (u16)dimof(gFullscreenFields),
     gFullscreenFields,
     "ShowToolbar\0Toolbar\0ShowMenubar\0DisplayMode",
     "legacy bool for fullscreen toolbar; if Fullscreen.Toolbar is empty, derived as show/hide (internal; use "
@@ -520,6 +544,7 @@ static const StructInfo gFullscreenInfo = {
     "(Shift+Ctrl+L / F11). empty keeps the current behavior: presentation uses single page, windowed fullscreen keeps "
     "the existing layout",
     false};
+static_assert(dimof(gFullscreenFields) == 4);
 
 static const FieldInfo gSelectionHandlerFields[] = {
     {offsetof(SelectionHandler, url), SettingType::String, 0},
@@ -536,7 +561,7 @@ static const FieldInfo gSelectionHandlerFields[] = {
 };
 static const StructInfo gSelectionHandlerInfo = {
     sizeof(SelectionHandler),
-    11,
+    (u16)dimof(gSelectionHandlerFields),
     gSelectionHandlerFields,
     "URL\0Name\0Key\0Exe\0Method\0Body\0ContentType\0Headers\0SelectToolbarNameOrSvg\0ToolbarText\0ToolbarSvgIcon",
     "url to invoke for the selection. ${selection} is the selected text, ${userlang} the UI language (e.g. 'de'), "
@@ -559,6 +584,7 @@ static const StructInfo gSelectionHandlerInfo = {
     "label\0optional SVG icon for that main-toolbar button; if both ToolbarSvgIcon and ToolbarText are set, the icon "
     "is used",
     false};
+static_assert(dimof(gSelectionHandlerFields) == 11);
 
 static const FieldInfo gTextSnippetFields[] = {
     {offsetof(TextSnippet, name), SettingType::String, 0},
@@ -566,12 +592,13 @@ static const FieldInfo gTextSnippetFields[] = {
     {offsetof(TextSnippet, key), SettingType::String, 0},
 };
 static const StructInfo gTextSnippetInfo = {sizeof(TextSnippet),
-                                            3,
+                                            (u16)dimof(gTextSnippetFields),
                                             gTextSnippetFields,
                                             "Name\0Text\0Key",
                                             "name shown in the context menu and the command palette\0text of the free "
                                             "text annotation it inserts; \\n starts a new line\0keyboard shortcut",
                                             false};
+static_assert(dimof(gTextSnippetFields) == 3);
 
 static const FieldInfo gShortcutFields[] = {
     {offsetof(Shortcut, cmd), SettingType::String, (intptr_t)""},
@@ -582,7 +609,7 @@ static const FieldInfo gShortcutFields[] = {
 };
 static const StructInfo gShortcutInfo = {
     sizeof(Shortcut),
-    5,
+    (u16)dimof(gShortcutFields),
     gShortcutFields,
     "Cmd\0Key\0Name\0ToolbarText\0ToolbarSvgIcon",
     "command to run, e.g. CmdOpenFile. See [the list of "
@@ -590,6 +617,7 @@ static const StructInfo gShortcutInfo = {
     "command palette\0if given, shows in toolbar\0optional SVG icon for toolbar button; if both ToolbarSvgIcon and "
     "ToolbarText are set, the icon is used",
     false};
+static_assert(dimof(gShortcutFields) == 5);
 
 static const FieldInfo gThemeFields[] = {
     {offsetof(Theme, name), SettingType::String, (intptr_t)""},
@@ -615,7 +643,7 @@ static const FieldInfo gThemeFields[] = {
 };
 static const StructInfo gThemeInfo = {
     sizeof(Theme),
-    20,
+    (u16)dimof(gThemeFields),
     gThemeFields,
     "Name\0TextColor\0BackgroundColor\0ControlBackgroundColor\0ActiveTabBackgroundColor\0InactiveTabBackgroundColor\0Li"
     "nkColor\0DisabledTextColor\0DarkerTextColor\0HotBackgroundColor\0EdgeColor\0HotEdgeColor\0DisabledEdgeColor\0Error"
@@ -636,11 +664,14 @@ static const StructInfo gThemeInfo = {
     "yellow in light themes, HotBackgroundColor in dark ones\0border color of the citation hover preview; if empty, "
     "uses HotEdgeColor\0if true, apply the theme colors to Windows controls and window areas too",
     false};
+static_assert(dimof(gThemeFields) == 20);
 
 static const FieldInfo gTabFileFields[] = {
     {offsetof(TabFile, path), SettingType::String, (intptr_t)""},
 };
-static const StructInfo gTabFileInfo = {sizeof(TabFile), 1, gTabFileFields, "Path", "path of the document", false};
+static const StructInfo gTabFileInfo = {sizeof(TabFile), (u16)dimof(gTabFileFields), gTabFileFields,
+                                        "Path",          "path of the document",     false};
+static_assert(dimof(gTabFileFields) == 1);
 
 static const FieldInfo gTabGroupFields[] = {
     {offsetof(TabGroup, name), SettingType::String, (intptr_t)""},
@@ -649,12 +680,13 @@ static const FieldInfo gTabGroupFields[] = {
 };
 static const StructInfo gTabGroupInfo = {
     sizeof(TabGroup),
-    3,
+    (u16)dimof(gTabGroupFields),
     gTabGroupFields,
     "Name\0TabFiles\0AutoSync",
     "name of the tab group, as shown when restoring it\0documents that belong to this tab group\0if true, the group "
     "follows the tabs of the window it was saved from or restored into",
     false};
+static_assert(dimof(gTabGroupFields) == 3);
 
 static const FieldInfo gRectFields[] = {
     {offsetof(Rect, x), SettingType::Int, 0},
@@ -664,12 +696,13 @@ static const FieldInfo gRectFields[] = {
 };
 static const StructInfo gRectInfo = {
     sizeof(Rect),
-    4,
+    (u16)dimof(gRectFields),
     gRectFields,
     "X\0Y\0Dx\0Dy",
     "x coordinate of the top-left corner, in screen pixels\0y coordinate of the top-left corner, in screen "
     "pixels\0width, in screen pixels\0height, in screen pixels",
     false};
+static_assert(dimof(gRectFields) == 4);
 
 static const FieldInfo gRect_1_Fields[] = {
     {offsetof(Rect, x), SettingType::Int, 0},
@@ -679,12 +712,13 @@ static const FieldInfo gRect_1_Fields[] = {
 };
 static const StructInfo gRect_1_Info = {
     sizeof(Rect),
-    4,
+    (u16)dimof(gRect_1_Fields),
     gRect_1_Fields,
     "X\0Y\0Dx\0Dy",
     "x coordinate of the top-left corner, in screen pixels\0y coordinate of the top-left corner, in screen "
     "pixels\0width, in screen pixels\0height, in screen pixels",
     false};
+static_assert(dimof(gRect_1_Fields) == 4);
 
 static const FieldInfo gRect_2_Fields[] = {
     {offsetof(Rect, x), SettingType::Int, 0},
@@ -694,24 +728,26 @@ static const FieldInfo gRect_2_Fields[] = {
 };
 static const StructInfo gRect_2_Info = {
     sizeof(Rect),
-    4,
+    (u16)dimof(gRect_2_Fields),
     gRect_2_Fields,
     "X\0Y\0Dx\0Dy",
     "x coordinate of the top-left corner, in screen pixels\0y coordinate of the top-left corner, in screen "
     "pixels\0width, in screen pixels\0height, in screen pixels",
     false};
+static_assert(dimof(gRect_2_Fields) == 4);
 
 static const FieldInfo gPointFFields[] = {
     {offsetof(PointF, x), SettingType::Float, (intptr_t)"-1"},
     {offsetof(PointF, y), SettingType::Float, (intptr_t)"-1"},
 };
 static const StructInfo gPointFInfo = {sizeof(PointF),
-                                       2,
+                                       (u16)dimof(gPointFFields),
                                        gPointFFields,
                                        "X\0Y",
                                        "horizontal position on the page, in document units; -1 if not stored\0vertical "
                                        "position on the page, in document units; -1 if not stored",
                                        false};
+static_assert(dimof(gPointFFields) == 2);
 
 static const FieldInfo gFavoriteFields[] = {
     {offsetof(Favorite, name), SettingType::String, 0},
@@ -722,7 +758,7 @@ static const FieldInfo gFavoriteFields[] = {
 };
 const StructInfo gFavoriteInfo = {
     sizeof(Favorite),
-    5,
+    (u16)dimof(gFavoriteFields),
     gFavoriteFields,
     "Name\0PageNo\0PageLabel\0ScrollPos\0IsTemporary",
     "name of this favorite as shown in the menu\0number of the bookmarked page, or `bm:<bookmark>` for documents with "
@@ -730,6 +766,7 @@ const StructInfo gFavoriteInfo = {
     "the same)\0position on the page when the favorite was added (document units; -1 if not stored)\0session-only "
     "favorite; omitted when serializing array elements",
     true};
+static_assert(dimof(gFavoriteFields) == 5);
 
 static const FieldInfo gFileEBookUIFields[] = {
     {offsetof(FileEBookUI, fontName), SettingType::String, (intptr_t)""},
@@ -743,7 +780,7 @@ static const FieldInfo gFileEBookUIFields[] = {
 };
 const StructInfo gFileEBookUIInfo = {
     sizeof(FileEBookUI),
-    8,
+    (u16)dimof(gFileEBookUIFields),
     gFileEBookUIFields,
     "FontName\0FontSize\0Margin\0LineSpacing\0LayoutDx\0LayoutDy\0IgnoreDocumentCSS\0CustomCSS",
     "font family for this document (e.g. Segoe UI, Microsoft YaHei); empty uses EBookUI.FontName\0font size in points "
@@ -754,6 +791,7 @@ const StructInfo gFileEBookUIInfo = {
     "the CSS in this document is ignored: true or false; empty uses EBookUI.IgnoreDocumentCSS\0additional CSS applied "
     "to this document; empty uses EBookUI.CustomCSS",
     false};
+static_assert(dimof(gFileEBookUIFields) == 8);
 
 static const FieldInfo gPointF_1_Fields[] = {
     {offsetof(PointF, x), SettingType::Float, (intptr_t)"0"},
@@ -761,11 +799,12 @@ static const FieldInfo gPointF_1_Fields[] = {
 };
 static const StructInfo gPointF_1_Info = {
     sizeof(PointF),
-    2,
+    (u16)dimof(gPointF_1_Fields),
     gPointF_1_Fields,
     "X\0Y",
     "horizontal scroll offset, in document units\0vertical scroll offset, in document units",
     false};
+static_assert(dimof(gPointF_1_Fields) == 2);
 
 static const FieldInfo gRect_3_Fields[] = {
     {offsetof(Rect, x), SettingType::Int, 0},
@@ -775,12 +814,13 @@ static const FieldInfo gRect_3_Fields[] = {
 };
 static const StructInfo gRect_3_Info = {
     sizeof(Rect),
-    4,
+    (u16)dimof(gRect_3_Fields),
     gRect_3_Fields,
     "X\0Y\0Dx\0Dy",
     "x coordinate of the top-left corner, in screen pixels\0y coordinate of the top-left corner, in screen "
     "pixels\0width, in screen pixels\0height, in screen pixels",
     false};
+static_assert(dimof(gRect_3_Fields) == 4);
 
 static const FieldInfo gRectFFields[] = {
     {offsetof(RectF, x), SettingType::Float, (intptr_t)"0"},
@@ -790,14 +830,16 @@ static const FieldInfo gRectFFields[] = {
 };
 static const StructInfo gRectFInfo = {
     sizeof(RectF),
-    4,
+    (u16)dimof(gRectFFields),
     gRectFFields,
     "X\0Y\0Dx\0Dy",
     "left edge, as a fraction of the page width\0top edge, as a fraction of the page height\0width, as a fraction of "
     "the page width\0height, as a fraction of the page height",
     false};
+static_assert(dimof(gRectFFields) == 4);
 
-static const char* gEnumFileStateSidebarView[] = {"", "bookmarks", "thumbnails", "favorites", nullptr};
+static const char* gEnumFileStateSidebarView[] = {"",           "bookmarks", "thumbnails", "favorites",
+                                                  "signatures", "layers",    nullptr};
 static const char* gEnumFileStateDisplayMode[] = {
     "automatic",         "single page",          "facing", "book view", "continuous",
     "continuous facing", "continuous book view", nullptr};
@@ -838,24 +880,25 @@ const FieldInfo gFileStateFields[] = {
     {offsetof(FileState, facingStepOne), SettingType::Bool, false},
     {offsetof(FileState, mirror), SettingType::Bool, false},
     {offsetof(FileState, readingAutoScrollSpeed), SettingType::Float, (intptr_t)"0"},
+    {offsetof(FileState, readColumns), SettingType::Bool, false},
 };
 StructInfo gFileStateInfo = {
     sizeof(FileState),
-    35,
+    (u16)dimof(gFileStateFields),
     gFileStateFields,
     "Favorites\0EBookUI\0TocState\0FilePath\0DecryptionKey\0SidebarView\0DisplayMode\0Zoom\0BgCol\0TabCol\0LayerStates"
     "\0MeasurementUnit\0MeasurementScale\0OpenCount\0PageNo\0PageCount\0Rotation\0Brightness\0Contrast\0WindowState\0Si"
     "debarDx\0ScrollPos\0WindowPos\0IsPinned\0IsMissing\0UseDefaultState\0ShowToc\0DisplayR2L\0UniformPageWidth\0TrimEm"
-    "ptyMargins\0UserCrop\0FreePan\0FacingStepOne\0Mirror\0ReadingAutoScrollSpeed",
+    "ptyMargins\0UserCrop\0FreePan\0FacingStepOne\0Mirror\0ReadingAutoScrollSpeed\0ReadColumns",
     "pages of this document bookmarked in the Favorites menu\0reflowable (ebook) settings for just this document. The "
     "block is absent until you add it; a field left empty or 0 uses the global EBookUI value. The global section's "
     "WindowBgCol and DefaultDisplayMode are already per-document as BgCol and DisplayMode below\0data required to "
     "determine which parts of the table of contents have been expanded\0path of the document\0data required to open a "
     "password protected document without having to ask for the password again\0what the sidebar's top panel shows: "
-    "bookmarks (the default), thumbnails or favorites\0layout of pages\0zoom (in %) or one of those values: fit page, "
-    "fit width, fit height, fit content, fit visible\0if given, overrides the background color for this document\0if "
-    "given, overrides the tab color for this document\0visibility of the PDF's layers (optional content groups), if "
-    "changed: 1 (shown) or 0 (hidden) for each layer, in document order\0unit name for calibrated "
+    "bookmarks (the default), thumbnails, favorites, signatures or layers\0layout of pages\0zoom (in %) or one of "
+    "those values: fit page, fit width, fit height, fit content, fit visible\0if given, overrides the background color "
+    "for this document\0if given, overrides the tab color for this document\0visibility of the PDF's layers (optional "
+    "content groups), if changed: 1 (shown) or 0 (hidden) for each layer, in document order\0unit name for calibrated "
     "measurements\0calibrated measurement units per document coordinate; 0 uses points\0number of times this document "
     "has been opened recently\0number of the last read page, or `bm:<bookmark>` for documents with chapters (folds in "
     "ReparseIdx; see PagePosition.cpp)\0number of pages in the document when it was last open; 0 if unknown. Used to "
@@ -873,8 +916,10 @@ StructInfo gFileStateInfo = {
     "CmdTrimPagesToSelection; all zeros shows whole pages\0if true, the view can be panned past the page edges, so any "
     "part of a page can be brought to the center of the window\0if true, facing and book view move one page at a time: "
     "pages 1-2, then 2-3, then 3-4\0if true, pages are shown (and printed) mirrored left to right\0Automatically "
-    "Scroll speed for this document, in pixels per second; 0 uses the global ReadingAutoScrollSpeed",
+    "Scroll speed for this document, in pixels per second; 0 uses the global ReadingAutoScrollSpeed\0if true, "
+    "scrolling reads a two-column page down its left column, then its right one (View / Read Columns)",
     false};
+static_assert(dimof(gFileStateFields) == 36);
 
 static const FieldInfo gPointF_2_Fields[] = {
     {offsetof(PointF, x), SettingType::Float, (intptr_t)"0"},
@@ -882,16 +927,18 @@ static const FieldInfo gPointF_2_Fields[] = {
 };
 static const StructInfo gPointF_2_Info = {
     sizeof(PointF),
-    2,
+    (u16)dimof(gPointF_2_Fields),
     gPointF_2_Fields,
     "X\0Y",
     "horizontal scroll offset, in document units\0vertical scroll offset, in document units",
     false};
+static_assert(dimof(gPointF_2_Fields) == 2);
 
 static const char* gEnumTabStateDisplayMode[] = {
     "automatic",         "single page",          "facing", "book view", "continuous",
     "continuous facing", "continuous book view", nullptr};
-static const char* gEnumTabStateSidebarView[] = {"", "bookmarks", "thumbnails", "favorites", nullptr};
+static const char* gEnumTabStateSidebarView[] = {"",           "bookmarks", "thumbnails", "favorites",
+                                                 "signatures", "layers",    nullptr};
 static const FieldInfo gTabStateFields[] = {
     {offsetof(TabState, filePath), SettingType::String, 0},
     {offsetof(TabState, displayMode), SettingType::String, (intptr_t)"automatic", false, gEnumTabStateDisplayMode,
@@ -906,16 +953,17 @@ static const FieldInfo gTabStateFields[] = {
 };
 const StructInfo gTabStateInfo = {
     sizeof(TabState),
-    9,
+    (u16)dimof(gTabStateFields),
     gTabStateFields,
     "FilePath\0DisplayMode\0PageNo\0Zoom\0Rotation\0ScrollPos\0ShowToc\0SidebarView\0TocState",
     "path of the document\0layout of pages in this tab\0number of the last read page, or `bm:<bookmark>` for documents "
     "with chapters (see PagePosition.cpp)\0zoom (in %) or one of those values: fit page, fit width, fit height, fit "
     "content, fit visible\0how far pages have been rotated as a multiple of 90 degrees\0how far this document has been "
     "scrolled (in x and y direction)\0if true, the table of contents was shown when the document was closed\0what the "
-    "sidebar's top panel showed: bookmarks, thumbnails or favorites\0which table of contents items were expanded (see "
-    "FileStates -> TocState)",
+    "sidebar's top panel showed: bookmarks, thumbnails, favorites, signatures or layers\0which table of contents items "
+    "were expanded (see FileStates -> TocState)",
     false};
+static_assert(dimof(gTabStateFields) == 9);
 
 static const FieldInfo gRect_4_Fields[] = {
     {offsetof(Rect, x), SettingType::Int, 0},
@@ -925,12 +973,13 @@ static const FieldInfo gRect_4_Fields[] = {
 };
 static const StructInfo gRect_4_Info = {
     sizeof(Rect),
-    4,
+    (u16)dimof(gRect_4_Fields),
     gRect_4_Fields,
     "X\0Y\0Dx\0Dy",
     "x coordinate of the top-left corner, in screen pixels\0y coordinate of the top-left corner, in screen "
     "pixels\0width, in screen pixels\0height, in screen pixels",
     false};
+static_assert(dimof(gRect_4_Fields) == 4);
 
 static const FieldInfo gSessionDataFields[] = {
     {offsetof(SessionData, tabStates), SettingType::Array, (intptr_t)&gTabStateInfo},
@@ -942,7 +991,7 @@ static const FieldInfo gSessionDataFields[] = {
 };
 const StructInfo gSessionDataInfo = {
     sizeof(SessionData),
-    6,
+    (u16)dimof(gSessionDataFields),
     gSessionDataFields,
     "TabStates\0TabIndex\0WindowState\0WindowPos\0SidebarDx\0VirtualDesktopId",
     "data required for restoring the view state of a single tab\0index of the currently selected tab (1-based)\0state "
@@ -950,24 +999,31 @@ const StructInfo gSessionDataInfo = {
     "any monitor)\0width of the favorites / bookmarks sidebar in screen pixels (0 if it wasn't shown)\0GUID of the "
     "virtual desktop the window was on; the window is restored there (Windows 10+)",
     false};
+static_assert(dimof(gSessionDataFields) == 6);
 
 static const FieldInfo gFILETIMEFields[] = {
     {offsetof(FILETIME, dwHighDateTime), SettingType::Int, 0},
     {offsetof(FILETIME, dwLowDateTime), SettingType::Int, 0},
 };
 static const StructInfo gFILETIMEInfo = {sizeof(FILETIME),
-                                         2,
+                                         (u16)dimof(gFILETIMEFields),
                                          gFILETIMEFields,
                                          "DwHighDateTime\0DwLowDateTime",
                                          "high 32 bits of the FILETIME\0low 32 bits of the FILETIME",
                                          false};
+static_assert(dimof(gFILETIMEFields) == 2);
 
 static const FieldInfo gPointFields[] = {
     {offsetof(Point, x), SettingType::Int, 0},
     {offsetof(Point, y), SettingType::Int, 0},
 };
-static const StructInfo gPointInfo = {
-    sizeof(Point), 2, gPointFields, "X\0Y", "x coordinate, in screen pixels\0y coordinate, in screen pixels", false};
+static const StructInfo gPointInfo = {sizeof(Point),
+                                      (u16)dimof(gPointFields),
+                                      gPointFields,
+                                      "X\0Y",
+                                      "x coordinate, in screen pixels\0y coordinate, in screen pixels",
+                                      false};
+static_assert(dimof(gPointFields) == 2);
 
 static const char* gEnumSettingsDefaultDisplayMode[] = {
     "automatic",         "single page",          "facing",      "book view", "continuous",
@@ -1021,6 +1077,7 @@ static const FieldInfo gSettingsFields[] = {
     {offsetof(Settings, rememberOpenedFiles), SettingType::Bool, true},
     {offsetof(Settings, rememberStatePerDocument), SettingType::Bool, true},
     {offsetof(Settings, restoreSession), SettingType::Bool, true},
+    {offsetof(Settings, keepMissingSessionTabs), SettingType::Bool, true},
     {offsetof(Settings, reuseInstance), SettingType::Bool, true},
     {offsetof(Settings, showMenubar), SettingType::Bool, true},
     {offsetof(Settings, showMenubarWithTabs), SettingType::Bool, false},
@@ -1041,6 +1098,7 @@ static const FieldInfo gSettingsFields[] = {
     {offsetof(Settings, sidebarBottomView), SettingType::String, 0, false, gEnumSettingsSidebarBottomView, "favorites"},
     {offsetof(Settings, showSidebarMiddle), SettingType::Bool, false},
     {offsetof(Settings, sortFavoritesByName), SettingType::Bool, false},
+    {offsetof(Settings, favoritesManualOrder), SettingType::Bool, false},
     {offsetof(Settings, showToc), SettingType::Bool, true},
     {offsetof(Settings, alwaysShowSidebar), SettingType::Bool, false},
     {offsetof(Settings, showThumbnailsIfNoToc), SettingType::Bool, false},
@@ -1191,33 +1249,33 @@ static const FieldInfo gSettingsFields[] = {
 };
 const StructInfo gSettingsInfo = {
     sizeof(Settings),
-    189,
+    (u16)dimof(gSettingsFields),
     gSettingsFields,
     "\0\0DefaultDisplayMode\0DefaultZoom\0DisableJavaScript\0AllowExternalImages\0EnableTeXEnhancements\0EscToExit\0Ful"
     "lPathInTitle\0InverseSearchCmdLine\0LazyLoading\0MainWindowBackground\0NoHomeTab\0NoCaj2pdfConverterDownload\0Home"
     "PageSortByFrequentlyRead\0HomePageViewMode\0ThumbnailsType\0FilePicker\0PrinterUI\0ReloadModifiedDocuments\0ShowSi"
     "gnatureStatus\0OfdTrustedCertificates\0TemporaryFileShowNotification\0TemporaryFileDestDir\0DownloadDirectory\0Tem"
-    "poraryFileAutoMove\0RememberOpenedFiles\0RememberStatePerDocument\0RestoreSession\0ReuseInstance\0ShowMenubar\0Sho"
-    "wMenubarWithTabs\0ShowPageNumberInTabs\0ShowHomePageReadingProgress\0ShowChaptersInEbooks\0ShowTips\0CustomColors"
-    "\0ShowToolbar\0Toolbar\0ToolbarPosition\0PageInfoLocation\0SearchUIFloating\0ShowFavorites\0SidebarBottomView\0Sho"
-    "wSidebarMiddle\0SortFavoritesByName\0ShowToc\0AlwaysShowSidebar\0ShowThumbnailsIfNoToc\0SidebarOnRight\0SidebarAut"
-    "oHide\0SidebarWindowSize\0ShowLinks\0HighlightFormFields\0ClickEdgeToTurnPage\0DisableLinks\0DisableLeftDragPan\0E"
-    "xplorerQuickLook\0RememberViewOffsetOnPageTurn\0MouseWheelTurnsPage\0InvertMouseWheel\0ScrollEdgeTurnsPage\0ShowDo"
-    "cumentFocusIndicator\0ShowAnnotationNotification\0ShowFileNavigateHint\0ShowAnnotationAuthorInTooltip\0ShowTocPage"
-    "Numbers\0TocWrapText\0AutoGenerateTOC\0ShowStartPage\0SidebarDx\0Scrollbars\0ScrollbarInSinglePage\0SmoothScroll\0"
-    "ScrollLineAmount\0SaveMemory\0PaddingAfterLastPage\0ContinuousScrollFollowsRotation\0IgnoreDestinationZoom\0Highli"
-    "ghtLinkDestination\0CitationHoverDelay\0ReadAloudVoiceId\0ReadAloudSpeed\0ReadingAutoScrollSpeed\0ReadingAutoScrol"
-    "lMinutes\0ReadingBar\0FastScrollOverScrollbar\0PreventSleepInFullscreen\0TabWidth\0TabsEqualWidth\0Theme\0HelpThem"
-    "e\0LastLightTheme\0LastDarkTheme\0DocumentColorsFollowTheme\0TocDy\0SidebarMiddleDy\0ToolbarCustomLayout\0ToolbarS"
-    "howReadAloud\0ToolbarSize\0TreeFontName\0TreeFontSize\0UIFontSize\0DisableAntiAlias\0EngineeringDrawingEnhance\0Di"
-    "sableAutoLinks\0UseSysColors\0UseTabs\0ShowCaption\0SelectionToolbar\0SelectionToolbarLayout\0TabsMru\0CtrlTabSimp"
-    "le\0ZoomLevels\0ZoomIncrement\0FitWidthPercent\0\0FixedPageUI\0\0EBookUI\0\0ComicBookUI\0\0ImageUI\0\0ChmUI\0\0Mar"
-    "kdownUI\0\0HtmlUI\0\0ClaudeCode\0\0GrokBuild\0\0CodexBuild\0\0AntiGravity\0\0AIChat\0\0AIChatSidebarDx\0\0Translat"
-    "eToLang\0TranslateFromLang\0TranslateEngine\0\0Annotations\0\0ExternalViewers\0\0ForwardSearch\0\0PrinterDefaults"
-    "\0\0Fullscreen\0\0SelectionHandlers\0\0TextSnippets\0\0Shortcuts\0\0Themes\0\0TabGroups\0\0CustomScreenDPI\0\0\0De"
-    "faultPasswords\0UiLanguage\0VersionToSkip\0WindowState\0WindowPos\0SearchUIWindowPos\0AnnotationsWindowShowNote\0H"
-    "elpWindowPos\0FileStates\0SessionData\0ReopenOnce\0TimeOfLastUpdateCheck\0OpenCountWeek\0PropWinPos\0CheckForUpdat"
-    "es\0OnlineApiKey\0OnlineServer\0\0",
+    "poraryFileAutoMove\0RememberOpenedFiles\0RememberStatePerDocument\0RestoreSession\0KeepMissingSessionTabs\0ReuseIn"
+    "stance\0ShowMenubar\0ShowMenubarWithTabs\0ShowPageNumberInTabs\0ShowHomePageReadingProgress\0ShowChaptersInEbooks"
+    "\0ShowTips\0CustomColors\0ShowToolbar\0Toolbar\0ToolbarPosition\0PageInfoLocation\0SearchUIFloating\0ShowFavorites"
+    "\0SidebarBottomView\0ShowSidebarMiddle\0SortFavoritesByName\0FavoritesManualOrder\0ShowToc\0AlwaysShowSidebar\0Sho"
+    "wThumbnailsIfNoToc\0SidebarOnRight\0SidebarAutoHide\0SidebarWindowSize\0ShowLinks\0HighlightFormFields\0ClickEdgeT"
+    "oTurnPage\0DisableLinks\0DisableLeftDragPan\0ExplorerQuickLook\0RememberViewOffsetOnPageTurn\0MouseWheelTurnsPage"
+    "\0InvertMouseWheel\0ScrollEdgeTurnsPage\0ShowDocumentFocusIndicator\0ShowAnnotationNotification\0ShowFileNavigateH"
+    "int\0ShowAnnotationAuthorInTooltip\0ShowTocPageNumbers\0TocWrapText\0AutoGenerateTOC\0ShowStartPage\0SidebarDx\0Sc"
+    "rollbars\0ScrollbarInSinglePage\0SmoothScroll\0ScrollLineAmount\0SaveMemory\0PaddingAfterLastPage\0ContinuousScrol"
+    "lFollowsRotation\0IgnoreDestinationZoom\0HighlightLinkDestination\0CitationHoverDelay\0ReadAloudVoiceId\0ReadAloud"
+    "Speed\0ReadingAutoScrollSpeed\0ReadingAutoScrollMinutes\0ReadingBar\0FastScrollOverScrollbar\0PreventSleepInFullsc"
+    "reen\0TabWidth\0TabsEqualWidth\0Theme\0HelpTheme\0LastLightTheme\0LastDarkTheme\0DocumentColorsFollowTheme\0TocDy"
+    "\0SidebarMiddleDy\0ToolbarCustomLayout\0ToolbarShowReadAloud\0ToolbarSize\0TreeFontName\0TreeFontSize\0UIFontSize"
+    "\0DisableAntiAlias\0EngineeringDrawingEnhance\0DisableAutoLinks\0UseSysColors\0UseTabs\0ShowCaption\0SelectionTool"
+    "bar\0SelectionToolbarLayout\0TabsMru\0CtrlTabSimple\0ZoomLevels\0ZoomIncrement\0FitWidthPercent\0\0FixedPageUI\0\0"
+    "EBookUI\0\0ComicBookUI\0\0ImageUI\0\0ChmUI\0\0MarkdownUI\0\0HtmlUI\0\0ClaudeCode\0\0GrokBuild\0\0CodexBuild\0\0Ant"
+    "iGravity\0\0AIChat\0\0AIChatSidebarDx\0\0TranslateToLang\0TranslateFromLang\0TranslateEngine\0\0Annotations\0\0Ext"
+    "ernalViewers\0\0ForwardSearch\0\0PrinterDefaults\0\0Fullscreen\0\0SelectionHandlers\0\0TextSnippets\0\0Shortcuts\0"
+    "\0Themes\0\0TabGroups\0\0CustomScreenDPI\0\0\0DefaultPasswords\0UiLanguage\0VersionToSkip\0WindowState\0WindowPos"
+    "\0SearchUIWindowPos\0AnnotationsWindowShowNote\0HelpWindowPos\0FileStates\0SessionData\0ReopenOnce\0TimeOfLastUpda"
+    "teCheck\0OpenCountWeek\0PropWinPos\0CheckForUpdates\0OnlineApiKey\0OnlineServer\0\0",
     "\0\0default layout of pages. page aspect (3.7+): first open of a PDF, XPS, DjVu or PostScript file uses page 1 — "
     "taller than wide is continuous + fit width, wider than tall is single page + fit page; a remembered FileState "
     "still wins\0default zoom. valid values: fit page, fit width, fit height, fit content, fit visible or percent like "
@@ -1253,26 +1311,29 @@ const StructInfo gSettingsInfo = {
     "there\0if true, keep a history of opened documents and their display settings (FileStates); closing a document "
     "doesn't remove it from the history. Also required for saving SessionData\0if true, store display settings for "
     "each document separately (i.e. everything after UseDefaultState in FileStates)\0if true, documents that were "
-    "still open when the last window was closed (SessionData) are reopened at startup\0if true, open documents in the "
-    "already running SumatraPDF instead of starting a new one\0if true, show the menu bar (F9 toggles it; the choice "
-    "is remembered across sessions)\0if true, show the menu bar when using tabs (useTabs = true)\0if true, show the "
-    "current page as n/N after the file name on tabs\0if true, show reading progress (n/N, or chapter:page for ebooks) "
-    "on home page thumbnails and list rows\0if true, a document with chapters (EPUB, MOBI) shows the current place as "
-    "a chapter and a page within that chapter, in the toolbar, Go to Page and the page-info tip. if false, those show "
-    "one page number for the whole document. the saved position stays a chapter bookmark either way, and next / "
-    "previous page still cross chapters\0if true, show tips on the home page\0up to 13 custom colors for the "
-    "background color picker, separated by space (e.g. '#ff0000 #00ff00 #0000ff')\0legacy bool for toolbar; if Toolbar "
-    "is empty, derived as show/hide (internal; use Toolbar instead)\0toolbar mode: show (pinned), hide (no toolbar), "
-    "overlay (toolbar floats over the page, sized to its natural width and centered, only shown when the mouse is near "
-    "it). if empty, derived from ShowToolbar\0where the toolbar is placed: top or bottom (applies to both show and "
-    "overlay modes)\0where Toggle Page Info (i) shows the page information: notification (or legacy), a tip over the "
-    "document; bottom, a bar below the document with more about the file and the page; bottom-overlay, the same bar "
-    "drawn over the bottom of the document\0if true, the find UI is a floating, movable window with a results list "
-    "instead of the compact toolbar overlay\0if true, show the sidebar's bottom panel: Favorites, unless "
-    "SidebarBottomView says otherwise\0what the sidebar's bottom panel shows: favorites (the default), bookmarks or "
-    "thumbnails\0if true, and the sidebar's top and bottom panels are visible, show a middle panel between them with "
-    "the view neither of them shows\0if true, favorites within each file are sorted alphabetically by name (or page "
-    "label); if false (the default), they are sorted by page number\0if true, show the table of contents (Bookmarks) "
+    "still open when the last window was closed (SessionData) are reopened at startup\0if true, a document of the "
+    "restored session that no longer exists keeps its tab, which shows that the file is missing; if false, its tab is "
+    "dropped at startup\0if true, open documents in the already running SumatraPDF instead of starting a new one\0if "
+    "true, show the menu bar (F9 toggles it; the choice is remembered across sessions)\0if true, show the menu bar "
+    "when using tabs (useTabs = true)\0if true, show the current page as n/N after the file name on tabs\0if true, "
+    "show reading progress (n/N, or chapter:page for ebooks) on home page thumbnails and list rows\0if true, a "
+    "document with chapters (EPUB, MOBI) shows the current place as a chapter and a page within that chapter, in the "
+    "toolbar, Go to Page and the page-info tip. if false, those show one page number for the whole document. the saved "
+    "position stays a chapter bookmark either way, and next / previous page still cross chapters\0if true, show tips "
+    "on the home page\0up to 13 custom colors for the background color picker, separated by space (e.g. '#ff0000 "
+    "#00ff00 #0000ff')\0legacy bool for toolbar; if Toolbar is empty, derived as show/hide (internal; use Toolbar "
+    "instead)\0toolbar mode: show (pinned), hide (no toolbar), overlay (toolbar floats over the page, sized to its "
+    "natural width and centered, only shown when the mouse is near it). if empty, derived from ShowToolbar\0where the "
+    "toolbar is placed: top or bottom (applies to both show and overlay modes)\0where Toggle Page Info (i) shows the "
+    "page information: notification (or legacy), a tip over the document; bottom, a bar below the document with more "
+    "about the file and the page; bottom-overlay, the same bar drawn over the bottom of the document\0if true, the "
+    "find UI is a floating, movable window with a results list instead of the compact toolbar overlay\0if true, show "
+    "the sidebar's bottom panel: Favorites, unless SidebarBottomView says otherwise\0what the sidebar's bottom panel "
+    "shows: favorites (the default), bookmarks or thumbnails\0if true, and the sidebar's top and bottom panels are "
+    "visible, show a middle panel between them with the view neither of them shows\0if true, favorites within each "
+    "file are sorted alphabetically by name (or page label); if false (the default), they are sorted by page "
+    "number\0if true, favorites within each file keep the order set in Edit Favorites and new ones are added at the "
+    "end; set by moving a favorite there, cleared by Sort By Name\0if true, show the table of contents (Bookmarks) "
     "sidebar when the document has one\0if true, every document with bookmarks opens with the Bookmarks sidebar, even "
     "one that was closed with it hidden\0if true, a document without bookmarks (and with more than one page) opens "
     "with the sidebar showing page thumbnails\0if true, put the bookmarks / favorites sidebar on the right of the "
@@ -1403,6 +1464,7 @@ const StructInfo gSettingsInfo = {
     "Set from File / Link SumatraPDF Web. Do not share the settings file.\0an empty value means the public SumatraPDF "
     "Web site. The dialog does not edit it.\0\0Settings below are not recognized by the current version",
     false};
+static_assert(dimof(gSettingsFields) == 191);
 static const FieldInfo gTheme_1_Fields[] = {
     {offsetof(Theme, name), SettingType::String, (intptr_t)""},
     {offsetof(Theme, textColor), SettingType::Color, (intptr_t)""},
@@ -1427,7 +1489,7 @@ static const FieldInfo gTheme_1_Fields[] = {
 };
 static const StructInfo gTheme_1_Info = {
     sizeof(Theme),
-    20,
+    (u16)dimof(gTheme_1_Fields),
     gTheme_1_Fields,
     "Name\0TextColor\0BackgroundColor\0ControlBackgroundColor\0ActiveTabBackgroundColor\0InactiveTabBackgroundColor\0Li"
     "nkColor\0DisabledTextColor\0DarkerTextColor\0HotBackgroundColor\0EdgeColor\0HotEdgeColor\0DisabledEdgeColor\0Error"
@@ -1448,10 +1510,13 @@ static const StructInfo gTheme_1_Info = {
     "yellow in light themes, HotBackgroundColor in dark ones\0border color of the citation hover preview; if empty, "
     "uses HotEdgeColor\0if true, apply the theme colors to Windows controls and window areas too",
     false};
+static_assert(dimof(gTheme_1_Fields) == 20);
 
 static const FieldInfo gThemesFields[] = {
     {offsetof(Themes, themes), SettingType::Array, (intptr_t)&gTheme_1_Info},
 };
-const StructInfo gThemesInfo = {sizeof(Themes), 1, gThemesFields, "Themes", "color themes", false};
+const StructInfo gThemesInfo = {sizeof(Themes), (u16)dimof(gThemesFields), gThemesFields, "Themes", "color themes",
+                                false};
+static_assert(dimof(gThemesFields) == 1);
 
 // NOLINTEND(modernize-use-designated-initializers)

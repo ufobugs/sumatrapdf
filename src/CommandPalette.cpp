@@ -50,6 +50,7 @@
 #include "Accelerators.h"
 #include "FilterHighlightDraw.h"
 #include "Annotation.h"
+#include "CanvasCommon.h"
 #include "AnnotSearch.h"
 #include "AnnotEditToolbar.h"
 #include "AnnotPlacement.h"
@@ -130,12 +131,6 @@ struct CommandPaletteWnd : WindowBase, PaletteSources {
     bool MoveSelection(int vkey);
     bool RemoveSelectedItem();
     void SwitchToPrefix(Str prefix);
-    void SwitchToCommands();
-    void SwitchToTabs();
-    void SwitchToEverything();
-    void SwitchToFileHistory();
-    void SwitchToTOC();
-    void SwitchToFavorites();
     void SwitchToSettings();
     void BeginEditSettingValue(Str path);
     void ReturnToSettings(Str selPath);
@@ -148,7 +143,7 @@ struct CommandPaletteWnd : WindowBase, PaletteSources {
     void DrawListBoxItem(VirtListBox::DrawItemEvent* ev);
 };
 
-extern CommandPaletteWnd* gCommandPaletteWnd;
+static CommandPaletteWnd* gCommandPaletteWnd = nullptr;
 
 // the palette: a query line over a hairline, the mode switches, the rows on
 // an inset with a rounded selection, and the key hints
@@ -181,7 +176,6 @@ static VirtCustom* NewPaletteRule() {
 }
 
 Str CommandPaletteSkipWS(Str s);
-bool CommandPaletteUiRtl();
 TempStr CommandPaletteShortcutTemp(i32 cmdId);
 void CommandPaletteSetCurrentSelection(CommandPaletteWnd* wnd, int idx);
 void ScheduleDeleteAndExecCommand(i32 cmdId = 0);
@@ -215,13 +209,6 @@ static i32 gCommandsNoActivate[] = {
 };
 // clang-format on
 
-// UI language (and the debug RTL toggle), not the palette hwnd: that window
-// stays LTR so virtual-control coords and clicks are not mirrored (#5956).
-bool CommandPaletteUiRtl() {
-    return IsUIRtl();
-}
-
-CommandPaletteWnd* gCommandPaletteWnd = nullptr;
 static int gPaletteOpDepth = 0;
 static HWND gHwndToActivateOnClose = nullptr;
 static WindowTab* gTabToSelectOnClose = nullptr;
@@ -277,7 +264,8 @@ void SafeDeleteCommandPaletteWnd() {
     if (gTabToSelectOnClose) {
         WindowTab* tab = gTabToSelectOnClose;
         gTabToSelectOnClose = nullptr;
-        if (IsMainWindowValidAndNotClosing(tab->win) && tab->win->GetTabIdx(tab) >= 0) {
+        // the tab may have been closed (and freed) since it was picked
+        if (IsMainWindowValidAndNotClosing(FindMainWindowByTab(tab))) {
             SelectTabInWindow(tab);
         }
     }
@@ -317,6 +305,14 @@ void CommandPaletteSetCurrentSelection(CommandPaletteWnd* wnd, int idx) {
     wnd->OnSelectionChange();
 }
 
+// fav is still one of fs's favorites and fs is still in the file history
+static bool FavoriteIsLive(FileState* fs, Favorite* fav) {
+    if (!gSettings->fileStates || !VecContains(*gSettings->fileStates, fs)) {
+        return false;
+    }
+    return fs->favorites && VecContains(*fs->favorites, fav);
+}
+
 struct RemoveItemOp {
     CommandPaletteWnd* wnd = nullptr;
     WindowTab* tab = nullptr;
@@ -349,10 +345,16 @@ static void ApplyRemoveItem(RemoveItemOp* op) {
         gPaletteOpDepth--;
     };
 
+    // the tab or favorite may be gone by the time this runs
     MainWindow* host = wnd->win;
     if (tab) {
-        CloseTab(tab, false);
+        if (IsWindowTabValid(tab)) {
+            CloseTab(tab, false);
+        }
     } else if (fav && favFs) {
+        if (!FavoriteIsLive(favFs, fav)) {
+            return;
+        }
         DelFavorite(favFs, fav);
     } else if (len(filePath) > 0 && host) {
         ForgetFileFromFrequentlyRead(host, filePath);
@@ -395,30 +397,6 @@ static void EditSetTextAndFocus(Edit* e, Str s) {
 
 void CommandPaletteWnd::SwitchToPrefix(Str prefix) {
     EditSetTextAndFocus(editQuery, prefix);
-}
-
-void CommandPaletteWnd::SwitchToCommands() {
-    SwitchToPrefix(Str(kPalettePrefixCommands));
-}
-
-void CommandPaletteWnd::SwitchToTabs() {
-    SwitchToPrefix(Str(kPalettePrefixTabs));
-}
-
-void CommandPaletteWnd::SwitchToEverything() {
-    SwitchToPrefix(Str(kPalettePrefixEverything));
-}
-
-void CommandPaletteWnd::SwitchToFileHistory() {
-    SwitchToPrefix(Str(kPalettePrefixFileHistory));
-}
-
-void CommandPaletteWnd::SwitchToTOC() {
-    SwitchToPrefix(Str(kPalettePrefixTOC));
-}
-
-void CommandPaletteWnd::SwitchToFavorites() {
-    SwitchToPrefix(Str(kPalettePrefixFavorites));
 }
 
 void CommandPaletteWnd::SwitchToSettings() {
@@ -1075,7 +1053,7 @@ bool CommandPaletteWnd::Create(MainWindow* win, Str prefix, int smartTabAdvance)
 
     if (!smartTabMode) {
         auto* box = new HBox();
-        box->rtl = CommandPaletteUiRtl();
+        box->rtl = IsUIRtl();
         switchRow = NewHelpRow(box, MainAxisAlign::MainCenter);
         FillSwitchRow();
         vbox->AddChild(new Padding(switchRow, DpiScaledInsets(6, kPaletteInsetDx, 4, kPaletteInsetDx)));
@@ -1131,7 +1109,7 @@ bool CommandPaletteWnd::Create(MainWindow* win, Str prefix, int smartTabAdvance)
     // the footer: the key hints and the count
     {
         auto* box = new HBox();
-        box->rtl = CommandPaletteUiRtl();
+        box->rtl = IsUIRtl();
         helpRow = NewHelpRow(box, MainAxisAlign::MainStart);
         vbox->AddChild(new Padding(helpRow, DpiScaledInsets(5, kPaletteInsetDx)));
         UpdateHelpRow();
@@ -1334,8 +1312,8 @@ TempStr CommandPaletteStateTemp(int* exitCodeOut) {
     out.Append(
         fmt("OK sel=%d items=%d querySel=%d,%d queryLen=%d cmd=%d rtl=%d thumb=%d page=%d rendered=%d annots=%d "
             "annotPage=%d annotsDone=%d ",
-            sel, n, qStart, qEnd, qLen, selectedCmdId, (int)CommandPaletteUiRtl(), (int)wnd->thumbnailMode, thumbPage,
-            rendered, nAnnots, annotPage, annotsDone));
+            sel, n, qStart, qEnd, qLen, selectedCmdId, (int)IsUIRtl(), (int)wnd->thumbnailMode, thumbPage, rendered,
+            nAnnots, annotPage, annotsDone));
     out.Append(fmt("settingHelp=%d selValue=%s selText=%s\n", (int)helpShown, selValue, selText));
     return finish(0);
 }
@@ -1345,18 +1323,17 @@ static TempStr UpdateCommandNameTemp(MainWindow* win, int cmdId, Str s) {
     bool newIsOn = false;
     switch (cmdId) {
         case CmdToggleInverseSearch: {
-            extern bool gDisableInteractiveInverseSearch;
             isToggle = true;
             newIsOn = !gDisableInteractiveInverseSearch;
         } break;
         case CmdToggleFullscreen: {
             isToggle = true;
-            newIsOn = !(win->isFullScreen || win->presentation);
+            newIsOn = !(win->IsFullScreenOrPresentation());
         } break;
         case CmdToggleToolbar: {
             isToggle = true;
             bool currentlyOn =
-                win->isFullScreen ? FullscreenToolbarModeFromPrefs() != kToolbarHide : !ToolbarModeIsHidden();
+                win->IsFullScreen() ? FullscreenToolbarModeFromPrefs() != kToolbarHide : !ToolbarModeIsHidden();
             newIsOn = !currentlyOn;
         } break;
         case CmdToggleMenuBar: {
@@ -1383,7 +1360,7 @@ static TempStr UpdateCommandNameTemp(MainWindow* win, int cmdId, Str s) {
         } break;
         case CmdTogglePresentationMode: {
             isToggle = true;
-            newIsOn = !win->presentation;
+            newIsOn = !win->InPresentation();
         } break;
         case CmdToggleLinks: {
             isToggle = true;
@@ -1842,7 +1819,7 @@ void CommandPaletteWnd::DrawListBoxItem(VirtListBox::DrawItemEvent* ev) {
     // hwnd stays LTR so mouse hit-testing and virtual-control coords match
     // (issue #5956). If the DC is still mirrored (nested RTL hwnd), turn it
     // off so Hebrew glyphs are not reversed.
-    bool isRtl = CommandPaletteUiRtl();
+    bool isRtl = IsUIRtl();
     bool hwndRtl = HwndIsRtl(hwndList);
     bool prevMirrored = hwndRtl ? gfx->SetMirrored(false) : false;
 

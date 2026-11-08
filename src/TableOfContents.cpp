@@ -474,9 +474,27 @@ static void TocCollapseSameLevel(TreeView* tv, TreeItem ti) {
     tv->ResumeRedraw();
 }
 
+// Expand or collapse `ti` and everything under it, leaving other chapters alone.
+static void TocSetChapterExpanded(TreeView* tv, TreeItem ti, uint flag) {
+    if (!tv || !tv->hwnd) {
+        return;
+    }
+    HTREEITEM hItem = tv->GetHandleByTreeItem(ti);
+    if (!hItem) {
+        return;
+    }
+    tv->SuspendRedraw();
+    TreeViewExpandRecursively(tv->hwnd, hItem, flag, true);
+    tv->ResumeRedraw();
+}
+
 static void TocContextMenu(ContextMenuEvent* ev) {
     MainWindow* win = FindMainWindowByHwnd(ev->w->hwnd);
-    Str filePath = win->ctrl->GetFilePath();
+    if (!win || !win->ctrl) {
+        return;
+    }
+    DocController* ctrl = win->ctrl;
+    Str filePath = ctrl->GetFilePath();
 
     Point pt{};
 
@@ -493,6 +511,10 @@ static void TocContextMenu(ContextMenuEvent* ev) {
 
     WindowTab* tab = win->CurrentTab();
     HMENU popup = BuildMenuFromDef(menuDefContextToc, CreatePopupMenu(), nullptr);
+    if (!dti || !dti->child) {
+        MenuRemove(popup, CmdTocExpandChapter);
+        MenuRemove(popup, CmdTocCollapseChapter);
+    }
 
     Str path;
     Str fileName;
@@ -518,15 +540,13 @@ static void TocContextMenu(ContextMenuEvent* ev) {
 
     int attachmentNo = -1;
     if (destKind == kindDestinationAttachment) {
-        auto* attachment = (PageDestinationFile*)dest;
+        auto* attachment = (PageDestination*)dest;
         // this is a path to a file on disk, e.g. a path to opened PDF
         // with the embedded stream number
-        path = attachment->path;
+        path = attachment->value;
         // this is name of the file as set inside PDF file
         fileName = dest->GetName();
-        // hack: attachmentNo is saved in pageNo see
-        // PdfLoadAttachments and DestFromAttachment
-        attachmentNo = pageNo;
+        attachmentNo = attachment->attachmentNo;
         bool canOpenEmbedded = str::EndsWithI(fileName, StrL(".pdf"));
         if (!canOpenEmbedded) {
             MenuRemove(popup, CmdOpenAttachment);
@@ -565,11 +585,14 @@ static void TocContextMenu(ContextMenuEvent* ev) {
         MenuRemove(popup, CmdFavoriteDel);
     }
     RemoveBadMenuSeparators(popup);
-    MarkMenuOwnerDraw(popup);
     uint flags = TPM_RETURNCMD | TPM_RIGHTBUTTON;
     int cmd = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, win->hwndFrame, nullptr);
-    FreeMenuOwnerDrawInfoData(popup);
     DestroyMenu(popup);
+    // the menu runs a message loop: DDE or a reload can close or replace the
+    // document meanwhile, freeing filePath, dti, dest and tab
+    if (!IsMainWindowValidAndNotClosing(win) || win->ctrl != ctrl || win->CurrentTab() != tab) {
+        return;
+    }
     switch (cmd) {
         case CmdExpandAll:
             win->tocTreeView->ExpandAll();
@@ -588,6 +611,12 @@ static void TocContextMenu(ContextMenuEvent* ev) {
             break;
         case CmdTocCollapseSameLevel:
             TocCollapseSameLevel(win->tocTreeView, ti);
+            break;
+        case CmdTocExpandChapter:
+            TocSetChapterExpanded(win->tocTreeView, ti, TVE_EXPAND);
+            break;
+        case CmdTocCollapseChapter:
+            TocSetChapterExpanded(win->tocTreeView, ti, TVE_COLLAPSE);
             break;
         case CmdExpandToCurrentPage:
             ExpandTocToCurrentPage(win);

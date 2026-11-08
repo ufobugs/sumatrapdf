@@ -117,6 +117,8 @@ bool OpenFileExternally(Str path);
 void CloseCurrentTab(MainWindow* win, bool quitIfLast);
 void CloseTab(WindowTab* tab, bool quitIfLast);
 bool MaybeSaveAnnotations(WindowTab* tab);
+bool SaveAnnotationsToExistingFile(WindowTab*);
+bool SaveAnnotationsToMaybeNewPdfFile(WindowTab*);
 enum class UnsavedChangesAction {
     Discard,
     SaveExisting,
@@ -124,7 +126,8 @@ enum class UnsavedChangesAction {
 };
 bool ResolveUnsavedChanges(WindowTab* tab, UnsavedChangesAction action, Str newPath = {});
 void DeleteFileFromDiskAndHistory(Str path);
-WindowTab* FindTabByFilePath(Str path);
+WindowTab* FindTabByFilePath(Str path, MainWindow* limitWin = nullptr);
+WindowTab* FindTabInWindow(Str path, MainWindow* win);
 // the tab that currently owns this controller, null if it is no longer shown
 WindowTab* FindTabByController(DocController*);
 bool CanCloseWindow(MainWindow* win);
@@ -162,7 +165,6 @@ constexpr int kToolbarHide = 1;
 constexpr int kToolbarOverlay = 2;
 extern SeqStrings gToolbarModeNames;
 int ToolbarModeFromPrefs();
-bool ToolbarModeIsOverlay();
 bool ToolbarModeIsHidden();
 void SetToolbarMode(int mode);
 int FullscreenToolbarModeFromPrefs();
@@ -203,8 +205,6 @@ void CopyLocationToClipboard(WindowTab*);
 
 MainWindow* FindMainWindowByFile(Str file, bool focusTab, MainWindow* limitWin = nullptr);
 MainWindow* FindMainWindowBySyncFile(Str path, bool focusTab);
-WindowTab* FindTabByFile(Str file, MainWindow* limitWin = nullptr);
-WindowTab* FindTabByFilePath(Str path, MainWindow* limitWin);
 void ExecuteCmd(MainWindow* win, int cmdId);
 void OpenNextPrevFileInFolder(MainWindow* win, bool forward, Str pathToDelete = {});
 void SelectTabInWindow(WindowTab*);

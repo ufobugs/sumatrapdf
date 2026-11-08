@@ -366,8 +366,15 @@ enum {
     CmdMeasure = 560,
     CmdReplaceImage = 561,
     CmdEditImageExternally = 562,
+    CmdToggleReadColumns = 563,
+    CmdToggleColumnsWholePage = 564,
+    CmdDebugShowDownloadedFonts = 565,
+    CmdTocExpandChapter = 566,
+    CmdTocCollapseChapter = 567,
+    CmdEditFavorites = 568,
+    CmdCloseMissingTabs = 569,
 
-    CmdLast = 562,
+    CmdLast = 569,
     CmdFirstCustom = CmdLast + 100,
 
     // aliases, at the end to not mess ordering

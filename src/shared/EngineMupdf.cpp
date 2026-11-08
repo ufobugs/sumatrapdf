@@ -1221,10 +1221,56 @@ static float StextLineHeight(const fz_stext_line* line) {
     return 10.f;
 }
 
+// Width of the first word of line. A CJK character is a word of its own, as
+// those scripts wrap anywhere.
+static float FirstWordWidth(const fz_stext_line* line) {
+    constexpr int kFirstCjkRune = 0x2E80;
+    bool started = false;
+    float x0 = 0;
+    float x1 = 0;
+    for (fz_stext_char* c = line->first_char; c; c = c->next) {
+        if (c->c == ' ' || c->c == '\t') {
+            if (started) {
+                break;
+            }
+            continue;
+        }
+        fz_rect r = fz_rect_from_quad(c->quad);
+        if (!started) {
+            x0 = r.x0;
+            started = true;
+        }
+        x1 = r.x1;
+        if (c->c >= kFirstCjkRune) {
+            break;
+        }
+    }
+    return started ? x1 - x0 : 0;
+}
+
+// The last non-space character of line ends a sentence, a statement or a
+// bracketed / quoted part: . : ; ! ? ) ] } " ' and their CJK forms.
+static bool EndsSentence(const fz_stext_line* line) {
+    int last = 0;
+    for (fz_stext_char* c = line->first_char; c; c = c->next) {
+        if (c->c != ' ' && c->c != '\t') {
+            last = c->c;
+        }
+    }
+    static const int kEnders[] = {'.',    ':',    ';',    '!',    '?',    ')',    ']',    '}',    '"',    '\'',
+                                  0x2026, 0x201D, 0x2019, 0x3002, 0xFF01, 0xFF1F, 0xFF1A, 0xFF1B, 0x300D, 0x300F};
+    for (int e : kEnders) {
+        if (last == e) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // True when nextLine is a soft wrap of the same paragraph (reflow/ebook copy
 // should join with a space, not a newline — #5793).
 // FB2/HTML reflow lines typically share a ~0.25–0.35em gap; paragraph spacing
-// is larger (~0.5em+). Mid-line soft wraps also nearly fill the block width.
+// is larger (~0.5em+).
 static bool IsSoftLineBreak(const fz_stext_line* line, const fz_stext_line* nextLine, const fz_stext_block* block) {
     if (!line || !nextLine || !block) {
         return false;
@@ -1238,12 +1284,19 @@ static bool IsSoftLineBreak(const fz_stext_line* line, const fz_stext_line* next
     if (gap > h * 0.55f) {
         return false;
     }
-    // Soft wraps usually fill most of the block width; a short line is the
-    // end of a paragraph (or a title), so keep a hard newline after it.
+    // Soft wraps usually fill most of the block width; a short line is the end
+    // of a paragraph (or a title), so keep a hard newline after it. Unless it is
+    // ragged-right text: the next line's first word didn't fit after it and the
+    // line doesn't end a sentence or a statement (code).
     float blockW = block->bbox.x1 - block->bbox.x0;
     float lineW = line->bbox.x1 - line->bbox.x0;
     if (blockW > 1.f && lineW < blockW * 0.82f) {
-        return false;
+        float room = block->bbox.x1 - line->bbox.x1;
+        float spaceW = h * 0.3f;
+        bool nextWordFits = room > FirstWordWidth(nextLine) + spaceW;
+        if (nextWordFits || EndsSentence(line)) {
+            return false;
+        }
     }
     // New paragraphs often start with a larger left indent (text-indent).
     float dx = nextLine->bbox.x0 - line->bbox.x0;
@@ -2654,6 +2707,39 @@ static char* LookupNamedJavaScript(fz_context* ctx, pdf_document* doc, Str name)
     return js;
 }
 
+// true when a document-level script defines function `name` and shows a
+// popUpMenu, so name([...]) calls pass it the menu items (KiCad, issue #6503)
+static bool DocJsDefinesMenuFunction(fz_context* ctx, pdf_document* doc, Str name) {
+    pdf_obj* tree = nullptr;
+    bool found = false;
+    fz_var(tree);
+    fz_var(found);
+    fz_try(ctx) {
+        tree = pdf_load_name_tree(ctx, doc, PDF_NAME(JavaScript));
+        int n = pdf_dict_len(ctx, tree);
+        for (int i = 0; i < n && !found; i++) {
+            pdf_obj* jsObj = pdf_dict_get_val(ctx, tree, i);
+            if (pdf_is_dict(ctx, jsObj)) {
+                jsObj = pdf_dict_get(ctx, jsObj, PDF_NAME(JS));
+            }
+            if (!jsObj) {
+                continue;
+            }
+            char* js = pdf_load_stream_or_string_as_utf8(ctx, jsObj);
+            found = JsDefinesMenuFunction(Str(js), name);
+            fz_free(ctx, js);
+        }
+    }
+    fz_always(ctx) {
+        pdf_drop_obj(ctx, tree);
+    }
+    fz_catch(ctx) {
+        fz_report_error(ctx);
+        found = false;
+    }
+    return found;
+}
+
 // Altium schematic PDFs (and similar) put component metadata on /Link annots
 // whose action is Acrobat JavaScript: either app.popUpMenu("...") inline, or a
 // call to a named ShowCompProps_* function in catalog /Names /JavaScript.
@@ -2680,6 +2766,9 @@ static void AppendJsMenuLinks(fz_context* ctx, pdf_document* doc, pdf_page* pdfp
         return;
     }
 
+    // the menu function last checked by DocJsDefinesMenuFunction, and its answer
+    Str menuFnChecked;
+    bool menuFnIsMenu = false;
     for (int i = 0; i < n; i++) {
         char* js = nullptr;
         fz_rect rect{};
@@ -2708,15 +2797,25 @@ static void AppendJsMenuLinks(fz_context* ctx, pdf_document* doc, pdf_page* pdfp
             continue;
         }
         StrVec items;
+        StrVec returns;
         ParseJsPopUpMenuItems(Str(js), items);
-        if (len(items) == 0) {
-            Str name = ExtractJsCallName(Str(js));
-            if (name) {
-                char* namedJs = LookupNamedJavaScript(ctx, doc, name);
-                if (namedJs) {
-                    ParseJsPopUpMenuItems(Str(namedJs), items);
-                    fz_free(ctx, namedJs);
-                }
+        Str name = len(items) == 0 ? ExtractJsCallName(Str(js)) : Str{};
+        if (name) {
+            char* namedJs = LookupNamedJavaScript(ctx, doc, name);
+            if (namedJs) {
+                ParseJsPopUpMenuItems(Str(namedJs), items);
+                fz_free(ctx, namedJs);
+            }
+        }
+        // KiCad: the items are the call's arguments, the function lives in any script
+        if (name && len(items) == 0 && ParseJsMenuCallItems(Str(js), items, returns)) {
+            if (!str::Eq(name, menuFnChecked)) {
+                str::ReplaceWithCopy(&menuFnChecked, name);
+                menuFnIsMenu = DocJsDefinesMenuFunction(ctx, doc, name);
+            }
+            if (!menuFnIsMenu) {
+                items.Reset();
+                returns.Reset();
             }
         }
         fz_free(ctx, js);
@@ -2725,12 +2824,14 @@ static void AppendJsMenuLinks(fz_context* ctx, pdf_document* doc, pdf_page* pdfp
         }
         auto* dest = new PageDestinationJsMenu();
         dest->items = items;
+        dest->returns = returns;
         dest->rect = ToRectF(rect);
         auto* pel = new PageElementDestination(dest);
         pel->pageNo = pageNo;
         pel->rect = dest->rect;
         VecAppend(links, pel);
     }
+    str::Free(menuFnChecked);
 }
 
 // Acrobat keeps /Info from an earlier trailer when an incremental update omits it (issue #1846).
@@ -3094,7 +3195,7 @@ static void PdfFillInfoFromXmp(fz_context* ctx, pdf_document* doc, pdf_obj* info
 // Note: make sure to only call with docLock
 // PdfLoadAttachment && PdfLoadAttachments must traverse in the same order
 static Str PdfLoadAttachment(fz_context* ctx, pdf_document* doc, int no) {
-    pdf_obj* dict;
+    pdf_obj* dict = nullptr;
     fz_var(dict);
     Str res;
 
@@ -3152,7 +3253,7 @@ static Str PdfLoadAnnotationAttachment(fz_context* ctx, pdf_document* doc, int o
 // Note: make sure to only call with docLock
 static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc, Str path) {
     fz_outline root{};
-    pdf_obj* dict;
+    pdf_obj* dict = nullptr;
 
     fz_var(root);
     fz_var(dict);
@@ -3686,6 +3787,7 @@ static void ForEachPageInfo(EngineMupdf* e, const Fn& fn) {
 
 // "1" / "0" per optional content group. Caller holds docLock
 static TempStr LayerStatesTemp(EngineMupdf* e) {
+    ReportDebugIf(!e->docLock.IsHeldByCurrentThread());
     int n = e->layerCount;
     if (n <= 0) {
         return {};
@@ -3708,6 +3810,7 @@ static TempStr LayerStatesTemp(EngineMupdf* e) {
 // remembers the document's own layer state, to save only what the user changed.
 // Caller holds docLock
 static void LoadLayerDefaults(EngineMupdf* e) {
+    ReportDebugIf(!e->docLock.IsHeldByCurrentThread());
     auto* ctx = e->Ctx();
     fz_try(ctx) {
         e->layerCount = pdf_count_layers(ctx, e->pdfdoc);
@@ -4328,6 +4431,38 @@ static TempStr AssemblePdfTemp(const char* const* objs, int nObjs) {
     return ToStrTemp(b);
 }
 
+// GetTextForPage() hands out pointers that word count and search keep across
+// calls; an edit invalidating the page's text must not free them under them
+bool EngineBase_UnitTestTextOutlivesInvalidate() {
+    const char* objs[] = {
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Count 1 /Kids [3 0 R] /MediaBox [0 0 612 792] >>",
+        "<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Length 42 >>\nstream\nBT /F1 24 Tf 72 700 Td (Invalidated) Tj ET\nendstream",
+    };
+    TempStr pdf = AssemblePdfTemp(objs, dimof(objs));
+    EngineBase* engine = CreateEngineMupdfFromData(pdf, StrL("text.pdf"), nullptr);
+    if (!engine) {
+        return false;
+    }
+    Rect* coords = nullptr;
+    int n = 0;
+    Str text = engine->GetTextForPage(1, &n, &coords);
+    TempStr copy = str::DupTemp(text);
+    bool ok = str::Contains(text, StrL("Invalidated")) && n > 0 && coords;
+    Rect firstCoord = ok ? coords[0] : Rect{};
+
+    engine->InvalidateTextForPage(1);
+    ok = ok && str::Eq(text, copy) && coords[0] == firstCoord;
+
+    // the page extracts again after invalidation
+    Str again = engine->GetTextForPage(1);
+    ok = ok && str::Contains(again, StrL("Invalidated"));
+    SafeEngineRelease(&engine);
+    return ok;
+}
+
 // a code point above 255 after "10." is not a digit, and must not reach isdigit()
 bool EngineMupdf_UnitTestDoi() {
     Utf8PageText good = MakeUtf8PageTextTemp(StrL("10.1234/abc def"));
@@ -4747,6 +4882,7 @@ static bool IsLinearizedFile(EngineMupdf* e) {
 // one vector, pageCount full entries: PDF, XPS and single-chapter reflow docs
 // size of each page of a PDF, from its page object. Caller holds docLock
 static void LoadPdfPageMediaboxes(EngineMupdf* e) {
+    ReportDebugIf(!e->docLock.IsHeldByCurrentThread());
     auto* ctx = e->Ctx();
     for (int pageNo = 0; pageNo < e->pageCount; pageNo++) {
         pdf_obj* pageref = nullptr;
@@ -4778,6 +4914,7 @@ static void LoadPdfPageMediaboxes(EngineMupdf* e) {
 
 // Caller holds docLock
 static void LoadPdfPageLabels(EngineMupdf* e) {
+    ReportDebugIf(!e->docLock.IsHeldByCurrentThread());
     auto* ctx = e->Ctx();
     if (e->pageLabels) {
         e->pageLabels->~StrVec();
@@ -5179,6 +5316,7 @@ static bool RectNear(RectF a, RectF b) {
 // placeholder; matching chapters share one box, a different size is per page.
 // True when a display model that cached the old size must rebuild.
 static bool ApplyChapterMediabox(EngineMupdf* e, int chapter, RectF measured) {
+    ReportDebugIf(!e->pagesLock.IsHeldByCurrentThread());
     if (measured.IsEmpty() || chapter < 1 || chapter > len(e->chapterPages)) {
         return false;
     }
@@ -5328,7 +5466,7 @@ static NO_INLINE IPageDestination* DestFromAttachment(EngineMupdf* engine, fz_ou
     Str title = outline->title ? Str(outline->title) : StrL("");
     TempStr nameHex = str::MemToHexTemp(title);
     dest->value = str::Dup(fmt("%s:%d:attachname=%s", engine->FilePath(), outline->page.page, nameHex));
-    dest->pageNo = outline->page.page;
+    dest->attachmentNo = outline->page.page;
     return dest;
 }
 
@@ -6173,6 +6311,8 @@ static fz_stext_page* NewStextPage(fz_context* ctx, fz_page* page, const fz_stex
 
 // caller must hold pagesLock and renderLock
 static FzPageInfo* GetFzPageInfoLocked(EngineMupdf* e, Location loc, bool loadQuick, fz_cookie* cookie) {
+    ReportDebugIf(!e->pagesLock.IsHeldByCurrentThread());
+    ReportDebugIf(!e->renderLock.IsHeldByCurrentThread());
     auto* ctx = e->Ctx();
     // docLock too: loading a page loads its annotations and has MuPDF generate
     // their appearance streams, reading the same pdf objects the UI thread
@@ -6703,11 +6843,15 @@ static void fz_content_bbox_begin_mask(fz_context*, fz_device* dev, fz_rect rect
     d->ignore++;
 }
 
-static void fz_content_bbox_end_mask(fz_context*, fz_device* dev, fz_function*) {
+static void fz_content_bbox_end_ignore(fz_device* dev) {
     fz_content_bbox_device* d = (fz_content_bbox_device*)dev;
     if (d->ignore > 0) {
         d->ignore--;
     }
+}
+
+static void fz_content_bbox_end_mask(fz_context*, fz_device* dev, fz_function*) {
+    fz_content_bbox_end_ignore(dev);
 }
 
 static void fz_content_bbox_begin_group(fz_context*, fz_device* dev, fz_rect rect, fz_colorspace*, int /*isolated*/,
@@ -6728,10 +6872,7 @@ static int fz_content_bbox_begin_tile(fz_context*, fz_device* dev, fz_rect area,
 }
 
 static void fz_content_bbox_end_tile(fz_context*, fz_device* dev) {
-    fz_content_bbox_device* d = (fz_content_bbox_device*)dev;
-    if (d->ignore > 0) {
-        d->ignore--;
-    }
+    fz_content_bbox_end_ignore(dev);
 }
 
 static fz_device* FzNewContentBBoxDevice(fz_context* ctx, fz_rect* result, fz_rect pageRect) {
@@ -8546,11 +8687,22 @@ static TempStr FormatUnixTimeTemp(int64_t unixSecs) {
     }
     time_t t = (time_t)unixSecs;
     struct tm tm;
-    gmtime_s(&tm, &t);
+    if (gmtime_s(&tm, &t) != 0) {
+        return {};
+    }
     char buf[64];
     strftime(buf, sizeof buf, "%Y/%m/%d %H:%M:%S UTC", &tm);
     return str::DupTemp(Str(buf));
 }
+
+#if IS_DEBUG
+bool EngineMupdf_UnitTestFormatUnixTime() {
+    // a certificate's notAfter can be past what gmtime_s handles (year 3000)
+    constexpr int64_t kYear9999 = 253402300799LL;
+    return str::Eq(FormatUnixTimeTemp(86400), StrL("1970/01/02 00:00:00 UTC")) &&
+           len(FormatUnixTimeTemp(kYear9999)) == 0;
+}
+#endif
 
 static TempStr FormatPdfDateRawTemp(fz_context* ctx, pdf_obj* obj) {
     if (!obj) {
@@ -10075,6 +10227,7 @@ static void SaveIncrementalFromMemory(EngineMupdf* e, Str path, const pdf_write_
 // why an incremental save of path can't compare against memory, {} if it can.
 // Caller holds docLock.
 static Str WhyNotSaveFromMemory(EngineMupdf* e, Str path, const pdf_write_options& opts) {
+    ReportDebugIf(!e->docLock.IsHeldByCurrentThread());
     pdf_document* doc = e->pdfdoc;
     if (!opts.do_incremental) {
         return StrL("not incremental");
@@ -10209,6 +10362,7 @@ bool EngineMupdfSaveCopy(EngineBase* engine, Str path) {
 // caller must hold pagesLock (protects pages[] and pageInfo->images)
 // returns 1 or 0, or -1 while the page isn't fully loaded
 static int HasClipOptimizationsLocked(EngineMupdf* e, int pageNo) {
+    ReportDebugIf(!e->pagesLock.IsHeldByCurrentThread());
     ReportIf(pageNo < 1 || pageNo > e->pageCount);
     if (pageNo < 1 || pageNo > e->pageCount) {
         return 0;
@@ -10535,10 +10689,7 @@ static void AnnotLoadThread(EngineMupdf* e) {
     uitask::Post(fn, "AnnotLoadFinished");
 }
 
-#if defined(SUMATRA_NG)
-// ng: the annotation UI asks for one page's wrappers before it starts the
-// background loader; it cannot include EngineMupdf.h (mupdf headers clash with
-// gpui.h), so this is the entry point
+// Loads one page's annotation wrappers (page + annot dicts, not stext).
 void EngineMupdfLoadAnnotsForPage(EngineBase* engine, int pageNo) {
     EngineMupdf* e = AsEngineMupdf(engine);
     if (!e || pageNo < 1 || pageNo > e->pageCount) {
@@ -10550,7 +10701,6 @@ void EngineMupdfLoadAnnotsForPage(EngineBase* engine, int pageNo) {
     }
 }
 
-#endif
 void EngineMupdfStartLoadAllAnnotations(EngineBase* engine, const Vec<int>& firstPages, const Func0& onProgress) {
     EngineMupdf* e = AsEngineMupdf(engine);
     if (!e || !e->pdfdoc) {
@@ -10651,6 +10801,8 @@ static void DropPageImages(fz_context* ctx, FzPageInfo* pi) {
 // Drop cached page bits that were built from the old content stream.
 // Caller holds pagesLock and renderLock. Leaves annotation wrappers in place.
 static void InvalidateFzPageAfterContentChange(EngineMupdf* e, FzPageInfo* pi) {
+    ReportDebugIf(!e->pagesLock.IsHeldByCurrentThread());
+    ReportDebugIf(!e->renderLock.IsHeldByCurrentThread());
     auto* ctx = e->Ctx();
     if (pi->displayList) {
         fz_drop_display_list(ctx, pi->displayList);
@@ -10661,6 +10813,7 @@ static void InvalidateFzPageAfterContentChange(EngineMupdf* e, FzPageInfo* pi) {
     DropPageImages(ctx, pi);
     DeleteVecMembers(pi->links);
     DeleteVecMembers(pi->autoLinks);
+    AtomicIntInc(&e->elementsGeneration);
     if (pi->retainedLinks) {
         fz_drop_link(ctx, pi->retainedLinks);
         pi->retainedLinks = nullptr;
@@ -11400,10 +11553,6 @@ bool EngineMupdfHasOfdSignatures(EngineBase* engine) {
     }
     ScopedRecursiveMutex scope(&e->docLock);
     return ofd_count_signatures(e->Ctx(), e->_doc) > 0;
-}
-
-bool EngineMupdfSupportsAnnotations(EngineBase* engine) {
-    return EngineMupdfIsPdf(engine);
 }
 
 // Restyle a reflowable document with the current theme page colors and drop

@@ -9,7 +9,6 @@
 // must be last due to assert() over-write
 #include "base/tests/UtAssert.h"
 
-extern void AppendStoreTest();
 extern void ArchiveTest();
 extern void BaseUtilTest();
 extern void ByteOrderTests();
@@ -35,7 +34,6 @@ extern void RtfDoc_UnitTests();
 extern void PdfSync_UnitTests();
 extern void TextSelection_UnitTests();
 extern void PagePosition_UnitTests();
-extern void CommandPaletteModel_UnitTests();
 extern void SumatraPDF_UnitTests();
 extern void DocumentLayout_UnitTests();
 extern void RenderScale_UnitTests();
@@ -47,7 +45,6 @@ extern void TipMarkup_UnitTests();
 extern void ReadAloudHighlight_UnitTests();
 extern void RefHoverTest();
 extern void AppSettingsTest();
-extern void SimpleLogTest();
 extern bool ShortcutParse_UnitTestShiftedPunct();
 extern bool ShortcutParse_UnitTestGpuiStroke();
 extern bool ShortcutParse_UnitTestAccelTable();
@@ -60,6 +57,7 @@ extern bool MarkdownToc_UnitTestHighlightWikilinks();
 extern bool PdfDarkModeImageStats_UnitTest();
 extern bool EbookDoc_UnitTestLoading();
 extern bool EbookDoc_UnitTestLinearNo();
+extern bool EbookDoc_UnitTestUtf16BeTwice();
 bool GumboHtmlParser_UnitTest();
 bool DisplayMode_UnitTestZoom();
 bool Translations_UnitTestUnescape();
@@ -99,13 +97,6 @@ TempStr TestDocPathTemp(Str relPath) {
 }
 
 #if OS_WIN
-static void PrintStdout(Str s) {
-    if (str::IsNull(s)) {
-        return;
-    }
-    printf("%.*s", s.len, s.s);
-}
-
 static LONG WINAPI ForAiCrashHandler(EXCEPTION_POINTERS* exceptionInfo) {
     printf("test_util crash\n");
     str::Builder s;
@@ -147,7 +138,6 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    AppendStoreTest();
     ArchiveTest();
     BaseUtilTest();
     ByteOrderTests();
@@ -184,7 +174,6 @@ int main(int argc, char** argv) {
     ReadAloudHighlight_UnitTests();
     RefHoverTest();
     AppSettingsTest();
-    SimpleLogTest();
     utassert(ShortcutParse_UnitTestShiftedPunct());
     utassert(ShortcutParse_UnitTestGpuiStroke());
     utassert(ShortcutParse_UnitTestAccelTable());
@@ -198,6 +187,7 @@ int main(int argc, char** argv) {
     utassert(Accelerators_UnitTestFolderNavIsSafe());
     utassert(EbookDoc_UnitTestLoading());
     utassert(EbookDoc_UnitTestLinearNo());
+    utassert(EbookDoc_UnitTestUtf16BeTwice());
     utassert(GumboHtmlParser_UnitTest());
     utassert(DisplayMode_UnitTestZoom());
     utassert(Translations_UnitTestUnescape());

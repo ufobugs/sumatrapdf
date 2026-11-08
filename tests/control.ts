@@ -21,9 +21,7 @@ export enum ControlCommand {
   TestInverseSearch = 22,
   TestImageResizeArrowKey = 23,
   TestFindResultPageColumnClip = 24,
-  TestFileKind = 25,
   TestScrollToLink = 26,
-  TestI18nErrorString = 27,
   TestPageInfoOverlay = 28,
   TestGetToc = 29,
   TestPageLinks = 30,
@@ -72,7 +70,6 @@ export enum ControlCommand {
   TestSelectionToolbar = 73,
   TestMarkupAnnots = 74,
   TestCmykImageSave = 75,
-  TestContextMenuPoint = 76,
   TestFindWindowContents = 77,
   TestFindUiState = 78,
   TestRenderViewPrint = 79,
@@ -97,7 +94,6 @@ export enum ControlCommand {
   TestReadingBar = 98,
   TestSeedTextSelection = 99,
   TestTtsEngineCrash = 100,
-  StartPerfLog = 101,
   StopPerfLog = 102,
   WaitSessionRestored = 103,
   TestNavFiles = 104,
@@ -169,6 +165,10 @@ export enum ControlCommand {
   TestTocRows = 158,
   TestMeasurement = 159,
   TestImageReplace = 160,
+  // ng only: performance snapshot (cmd/port-perf.ts)
+  TestPerfStats = 161,
+  // ng only: the state of the canvas overlays
+  TestOverlayState = 162,
 }
 
 export type ControlArg = number | string | Uint8Array | ControlArg[];
@@ -732,7 +732,6 @@ export class ControlClient {
   }
 
   // Visible virtual controls. className limits the dump to one window class.
-  // "hit" is the control under a client point of that class, or null.
   async virtTree(className = ""): Promise<VirtCtrlInfo[]> {
     const res = await this.request(ControlCommand.TestVirtTree, className ? [className] : []);
     const code = typeof res[0] === "number" ? res[0] : -1;
@@ -748,19 +747,6 @@ export class ControlClient {
       rows.push(parseVirtLine(line));
     }
     return rows;
-  }
-
-  async virtHit(className: string, x: number, y: number): Promise<VirtCtrlInfo | null> {
-    const res = await this.request(ControlCommand.TestVirtTree, ["hit", className, x, y]);
-    const code = typeof res[0] === "number" ? res[0] : -1;
-    const raw = String(res[1] ?? "").trim();
-    if (code !== 0) {
-      throw new Error(`TestVirtTree hit failed: ${raw || code}`);
-    }
-    if (!raw || raw === "NONE") {
-      return null;
-    }
-    return parseVirtLine(raw);
   }
 
   // Notifications are drawn over the document and linger for ~2s, so a test

@@ -240,14 +240,6 @@ Rect DisplayModel::GetViewPort() const {
     return viewPort;
 }
 
-bool DisplayModel::IsHScrollbarVisible() const {
-    return viewPort.dx < totalViewPortSize.dx;
-}
-
-bool DisplayModel::IsVScrollbarVisible() const {
-    return viewPort.dy < totalViewPortSize.dy;
-}
-
 bool DisplayModel::NeedHScroll() const {
     return viewPort.dx < canvasSize.dx;
 }
@@ -418,6 +410,258 @@ void DisplayModel::SetAutoScrollSpeed(float speed) {
 
 float DisplayModel::GetAutoScrollSpeed() const {
     return autoScrollSpeed;
+}
+
+//--- Read Columns: a two-column page is read down its left column, then its right
+//
+//   +---------+---------+      scrolling down the left column, at its end
+//   |  1 ->   |  2 ->   |      the view jumps to the top of the right one,
+//   |  v      |  v      |      and from the end of that to the next page's
+//   +---------+---------+      left column. Up does the reverse.
+//
+// The zoom fits one column to the window, so the other is out of view.
+
+// space kept between a column's edge and the window's, in pixels
+constexpr int kColumnMarginPx = 8;
+
+void DisplayModel::SetReadColumns(bool enable) {
+    readColumns = enable;
+    columnsWholePage = false;
+}
+
+bool DisplayModel::GetReadColumns() const {
+    return readColumns;
+}
+
+// bins the content's width is split into to find the gutter
+constexpr int kGutterBins = 200;
+
+// The x of the gutter: the middle of the widest strip in the middle half of
+// the content that the least text touches (none, for a two-column page; a
+// title across both columns adds a little everywhere). The middle of the
+// content for a page without text, like a scan.
+float DisplayModel::ColumnGutterX(int pageNo) {
+    PageInfo* pi = GetPageInfo(pageNo);
+    RectF cb = pi ? pi->contentBox.Intersect(PageMediaBoxForLayout(pageNo)) : RectF{};
+    if (cb.IsEmpty()) {
+        cb = PageMediaBoxForLayout(pageNo);
+    }
+    float mid = cb.x + (cb.dx / 2);
+    if (!pi || cb.dx <= 0) {
+        return mid;
+    }
+    if (pi->columnGutterKnown) {
+        return pi->columnGutterX;
+    }
+    pi->columnGutterKnown = true;
+    pi->columnGutterX = mid;
+
+    int counts[kGutterBins]{};
+    PageText pt = engine->ExtractPageText(pageNo);
+    float binDx = cb.dx / kGutterBins;
+    for (int i = 0; i < pt.nCodepoints; i++) {
+        Rect r = pt.coords[i];
+        if (r.dx <= 0 || r.dy <= 0) {
+            continue;
+        }
+        int b0 = limitValue((int)(((float)r.x - cb.x) / binDx), 0, kGutterBins - 1);
+        int b1 = limitValue((int)(((float)(r.x + r.dx) - cb.x) / binDx), 0, kGutterBins - 1);
+        for (int b = b0; b <= b1; b++) {
+            counts[b]++;
+        }
+    }
+    bool hasText = pt.nCodepoints > 0;
+    FreePageText(&pt);
+    if (!hasText) {
+        return mid;
+    }
+
+    int first = kGutterBins / 4;
+    int last = (kGutterBins * 3) / 4;
+    int least = INT_MAX;
+    for (int b = first; b < last; b++) {
+        least = std::min(least, counts[b]);
+    }
+    int bestStart = -1;
+    int bestLen = 0;
+    for (int b = first; b < last;) {
+        if (counts[b] != least) {
+            b++;
+            continue;
+        }
+        int start = b;
+        while (b < last && counts[b] == least) {
+            b++;
+        }
+        if (b - start > bestLen) {
+            bestLen = b - start;
+            bestStart = start;
+        }
+    }
+    if (bestStart >= 0) {
+        pi->columnGutterX = cb.x + (((float)bestStart + ((float)bestLen / 2)) * binDx);
+    }
+    return pi->columnGutterX;
+}
+
+// col 0 is the page's content left of the gutter, col 1 right of it. The
+// content box leaves out the margins.
+RectF DisplayModel::ColumnRect(int pageNo, int col) {
+    // in page units (GetContentBox() is zoomed)
+    PageInfo* pi = GetPageInfo(pageNo);
+    if (pi && pi->contentBox.IsEmpty()) {
+        pi->contentBox = engine->PageContentBox(pageNo);
+    }
+    RectF cb = pi ? pi->contentBox.Intersect(PageMediaBoxForLayout(pageNo)) : RectF{};
+    if (cb.IsEmpty()) {
+        cb = PageMediaBoxForLayout(pageNo);
+    }
+    float gutter = limitValue(ColumnGutterX(pageNo), cb.x, cb.x + cb.dx);
+    if (col == 0) {
+        return {cb.x, cb.y, gutter - cb.x, cb.dy};
+    }
+    return {gutter, cb.y, cb.x + cb.dx - gutter, cb.dy};
+}
+
+// columns are read in continuous view and in single page view, but not while
+// the whole page is shown for a moment
+bool DisplayModel::ReadsColumnsNow() const {
+    DisplayMode mode = GetDisplayMode();
+    bool modeOk = mode == DisplayMode::Continuous || mode == DisplayMode::SinglePage;
+    return readColumns && !columnsWholePage && modeOk && NormalizeRotation(rotation) == 0;
+}
+
+// the column the middle of the window is in
+bool DisplayModel::CurrentColumn(int* pageNo, int* col) {
+    Point mid{viewPort.dx / 2, viewPort.dy / 2};
+    int page = GetPageNoByPoint(mid);
+    if (!ValidPageNo(page)) {
+        page = GetPageNextToPoint(mid);
+    }
+    if (!ValidPageNo(page)) {
+        return false;
+    }
+    Rect right = CvtToScreen(page, ColumnRect(page, 1));
+    *pageNo = page;
+    // at fit page the middle of the window is on the gutter: that reads as the left column
+    *col = mid.x > right.x + DpiScale(kColumnMarginPx) ? 1 : 0;
+    return true;
+}
+
+// The view's x for a column s (on screen): a column narrower than the window
+// sits against the side away from the other one, so that one stays out of view
+static int ColumnViewX(const Rect& viewPort, const Rect& s, int col, int margin) {
+    if (s.dx >= viewPort.dx - (2 * margin)) {
+        return viewPort.x + s.x - ((viewPort.dx - s.dx) / 2);
+    }
+    if (col == 0) {
+        return viewPort.x + s.x + s.dx + margin - viewPort.dx;
+    }
+    return viewPort.x + s.x - margin;
+}
+
+// scrolls so the column's top (or bottom) is at the window's.
+// Single page view shows the page first.
+void DisplayModel::ShowColumn(int pageNo, int col, bool top) {
+    if (!IsContinuous(GetDisplayMode()) && pageNo != CurrentPageNo()) {
+        GoToPage(pageNo, false);
+    }
+    Rect s = CvtToScreen(pageNo, ColumnRect(pageNo, col));
+    int margin = DpiScale(kColumnMarginPx);
+    int y = top ? viewPort.y + s.y - margin : viewPort.y + s.y + s.dy + margin - viewPort.dy;
+    ScrollXTo(ColumnViewX(viewPort, s, col, margin));
+    ScrollYTo(y);
+}
+
+// Scrolls dy within the current column, or jumps to the next / previous one
+// at its end. False when Read Columns doesn't apply, for a plain scroll.
+bool DisplayModel::ColumnScroll(int dy, bool changePage) {
+    if (inColumnScroll || !ReadsColumnsNow()) {
+        return false;
+    }
+    int pageNo = 0;
+    int col = 0;
+    if (!CurrentColumn(&pageNo, &col)) {
+        return false;
+    }
+    Rect s = CvtToScreen(pageNo, ColumnRect(pageNo, col));
+    int margin = DpiScale(kColumnMarginPx);
+    inColumnScroll = true;
+    defer {
+        inColumnScroll = false;
+    };
+    if (dy > 0) {
+        // how far down until the column's end shows
+        int room = s.y + s.dy + margin - viewPort.dy;
+        if (room > 0) {
+            ScrollYBy(std::min(dy, room), changePage);
+            return true;
+        }
+        if (col == 1 && pageNo >= PageCount()) {
+            return false;
+        }
+        ShowColumn(col == 0 ? pageNo : pageNo + 1, col == 0 ? 1 : 0, true);
+        return true;
+    }
+    int room = s.y - margin;
+    if (room < 0) {
+        ScrollYBy(std::max(dy, room), changePage);
+        return true;
+    }
+    if (col == 0 && pageNo <= 1) {
+        return false;
+    }
+    ShowColumn(col == 1 ? pageNo : pageNo - 1, col == 1 ? 0 : 1, false);
+    return true;
+}
+
+// Shows the whole page for a moment (a table or a figure across both
+// columns), and the next time goes back to the column, as it was.
+void DisplayModel::ToggleColumnsWholePage() {
+    if (!readColumns) {
+        return;
+    }
+    if (columnsWholePage) {
+        columnsWholePage = false;
+        SetZoomVirtual(columnsZoom, nullptr);
+        SetScrollState(columnsScroll);
+        return;
+    }
+    columnsZoom = GetZoomVirtual();
+    columnsScroll = GetScrollState();
+    int pageNo = CurrentPageNo();
+    columnsWholePage = true;
+    SetZoomVirtual(kZoomFitPage, nullptr);
+    GoToPage(pageNo, 0);
+}
+
+bool DisplayModel::ShowsColumnsWholePage() const {
+    return columnsWholePage;
+}
+
+// zooms so the page's wider column fills the window's width, and shows the current one
+void DisplayModel::FitColumnToWindow() {
+    int pageNo = 0;
+    int col = 0;
+    if (!CurrentColumn(&pageNo, &col)) {
+        return;
+    }
+    float want = (float)(viewPort.dx - (2 * DpiScale(kColumnMarginPx)));
+    // measured again after the first step: the scrollbar showing up or going
+    // away changes the window's width
+    for (int i = 0; i < 2; i++) {
+        // in page units: what's on screen lags a zoom change
+        float colDx = std::max(ColumnRect(pageNo, 0).dx, ColumnRect(pageNo, 1).dx);
+        float real = GetZoomReal(pageNo);
+        if (colDx <= 0 || real <= 0) {
+            return;
+        }
+        float zoom = GetZoomVirtual(true) * (want / colDx) / real;
+        SetZoomVirtual(limitValue(zoom, kZoomMin, kZoomMax), nullptr);
+        want = (float)(viewPort.dx - (2 * DpiScale(kColumnMarginPx)));
+    }
+    Rect s = CvtToScreen(pageNo, ColumnRect(pageNo, col));
+    ScrollXTo(ColumnViewX(viewPort, s, col, DpiScale(kColumnMarginPx)));
 }
 
 // Shows on every page the part that rect (in page coordinates) covers on pageNo.
@@ -729,6 +973,7 @@ void DisplayModel::GetDisplayState(FileState* fs) {
     fs->trimEmptyMargins = trimEmptyMargins;
     fs->userCrop = userCrop;
     fs->readingAutoScrollSpeed = autoScrollSpeed;
+    fs->readColumns = readColumns;
     fs->freePan = freePan;
     fs->facingStepOne = facingStepOne;
     fs->mirror = mirror;
@@ -2822,6 +3067,10 @@ void DisplayModel::SetDisplayMode(DisplayMode newDisplayMode, bool keepContinuou
 }
 
 void DisplayModel::SetInPresentation(bool enable) {
+    // entering twice would save the presentation layout as the one to restore
+    if (enable && inPresentation) {
+        return;
+    }
     inPresentation = enable;
     if (inPresentation) {
         presDisplayMode = displayMode;
@@ -3233,6 +3482,10 @@ void DisplayModel::ScrollYBy(int dy, bool changePage) {
 
     ReportIf(0 == dy);
     if (0 == dy) {
+        return;
+    }
+
+    if (ColumnScroll(dy, changePage)) {
         return;
     }
 

@@ -262,19 +262,7 @@ bool ConvertImageCollectionToPdf(EngineBase* engine, Str destPath) {
 
     TempStr producer = fmt("SumatraPDF %s", currentVersion);
     PdfCreator::SetProducerName(producer);
-    // Formats PDF cannot re-wrap (WebP, JXL, HEIC, AVIF, TGA, …): decode via
-    // the same codecs we use for viewing, then PNG + zopfli before embed.
-    auto toOptimizedPng = [](Str data) -> Str {
-        Pixmap* px = PixmapFromData(data);
-        if (!px) {
-            logf("ConvertToPdf: decode-to-pixmap failed (%d bytes)\n", len(data));
-            return {};
-        }
-        Str png = EncodeAndOptimizePngFromPixmap(px);
-        FreePixmap(px);
-        return png;
-    };
-    return PdfCreator::SaveImageCollectionAsPdf(destPath, engine, toOptimizedPng);
+    return PdfCreator::SaveImageCollectionAsPdf(destPath, engine);
 }
 
 // 0 if not a usable font size
@@ -448,23 +436,35 @@ bool EstimateSelectionPx(RectF rect, float zoom, int& w, int& h) {
     return w > 0 && h > 0;
 }
 
+const ConvertImageFormat kConvertImageFormats[kConvertImageFormatCount] = {
+    {StrL("PNG"), StrL(".png")},
+    {StrL("JPEG"), StrL(".jpg")},
+    {StrL("BMP"), StrL(".bmp")},
+    {StrL("GIF"), StrL(".gif")},
+};
+constexpr int kConvertImageJpegIdx = 1;
+
+// index into kConvertImageFormats for path's extension, -1 if none
+static int FindConvertImageFormat(Str path) {
+    if (str::EndsWithI(path, StrL(".jpeg"))) {
+        return kConvertImageJpegIdx;
+    }
+    for (int i = 0; i < kConvertImageFormatCount; i++) {
+        if (str::EndsWithI(path, kConvertImageFormats[i].ext)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// index into kConvertImageFormats for path, PNG when the extension is unknown
 int ConvertImageFormatIdxFromPath(Str path) {
-    if (str::EndsWithI(path, StrL(".jpg")) || str::EndsWithI(path, StrL(".jpeg"))) {
-        return 1;
-    }
-    if (str::EndsWithI(path, StrL(".bmp"))) {
-        return 2;
-    }
-    if (str::EndsWithI(path, StrL(".gif"))) {
-        return 3;
-    }
-    return 0; // PNG
+    int idx = FindConvertImageFormat(path);
+    return idx < 0 ? 0 : idx;
 }
 
 bool IsSupportedConvertImageExt(Str path) {
-    return str::EndsWithI(path, StrL(".png")) || str::EndsWithI(path, StrL(".jpg")) ||
-           str::EndsWithI(path, StrL(".jpeg")) || str::EndsWithI(path, StrL(".bmp")) ||
-           str::EndsWithI(path, StrL(".gif"));
+    return FindConvertImageFormat(path) >= 0;
 }
 
 bool PathHasPagePlaceholder(Str path) {

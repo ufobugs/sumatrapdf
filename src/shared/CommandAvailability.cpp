@@ -72,6 +72,7 @@ static const i32 gNoDocWhitelist[] = {
     CmdToggleGrayscale,
     CmdFavoriteToggle,
     CmdFavoriteShowInTab,
+    CmdEditFavorites,
     CmdGoToHomePage,
     CmdNewTab,
     CmdShowLog,
@@ -210,6 +211,7 @@ static const i32 removeIfNoInternetPerms[] = {
     CmdContributeTranslation,
     CmdSumatraPDFWeb,
     CmdOpenFromURL,
+    CmdDebugShowDownloadedFonts,
     0,
 };
 
@@ -230,6 +232,7 @@ static const i32 removeIfNoPrefsPerms[] = {
     CmdFavoriteDel,
     CmdFavoriteToggle,
     CmdFavoriteShowInTab,
+    CmdEditFavorites,
     CmdToggleFavoritesSort,
     CmdGoToNextFavorite,
     CmdGoToPrevFavorite,
@@ -291,6 +294,7 @@ static const i32 removeIfNoDiskAccessPerm[] = {
     CmdFavoriteDel,
     CmdFavoriteToggle,
     CmdFavoriteShowInTab,
+    CmdEditFavorites,
     CmdToggleFavoritesSort,
     CmdOpenSelectedDocument,
     CmdPinSelectedDocument,
@@ -382,6 +386,8 @@ static const i32 gBlacklistCommandsFromPalette[] = {
     CmdTocExpandToLevel2,
     CmdTocExpandToLevel3,
     CmdTocCollapseSameLevel,
+    CmdTocExpandChapter,
+    CmdTocCollapseChapter,
     CmdMoveFrameFocus,
     CmdFavoriteDel,
     CmdPresentationWhiteBackground,
@@ -543,6 +549,10 @@ CommandVisibility GetCommandVisibility(int cmdId, const AppCommandCtx& ctx, Comm
         }
     }
 
+    if (CmdCloseMissingTabs == cmdId) {
+        // checking the files here would stat them on every menu build (#6369)
+        return ctx.hasDocTabs ? CommandVisibility::Show : CommandVisibility::Hide;
+    }
     if (CmdCloseOtherTabs == cmdId) {
         return ctx.canCloseOtherTabs ? CommandVisibility::Show : CommandVisibility::Hide;
     }
@@ -706,12 +716,15 @@ CommandVisibility GetCommandVisibility(int cmdId, const AppCommandCtx& ctx, Comm
         return CommandVisibility::Hide;
     }
 
-    // OFD pages render to images like PDF pages
-    if (!ctx.isPdf && !(ctx.isOfd && cmdId == CmdConvertPdfToImages)) {
+    // any document with rendered pages converts to images; an ebook as laid out (#6505)
+    if (cmdId == CmdConvertPdfToImages && !ctx.isFixedPage) {
+        return CommandVisibility::Hide;
+    }
+    if (!ctx.isPdf) {
         if (cmdId == CmdPdfShowInfo || cmdId == CmdPdfBake || cmdId == CmdPdfCompress || cmdId == CmdPdfDecompress ||
             cmdId == CmdPdfEncrypt || cmdId == CmdPdfDecrypt || cmdId == CmdPdfDeletePages ||
-            cmdId == CmdPdfExtractPages || cmdId == CmdTogglePageBoxes || cmdId == CmdConvertPdfToImages ||
-            cmdId == CmdToggleEditPDF || cmdId == CmdMergePDF || cmdId == CmdRunPDFScript) {
+            cmdId == CmdPdfExtractPages || cmdId == CmdTogglePageBoxes || cmdId == CmdToggleEditPDF ||
+            cmdId == CmdMergePDF || cmdId == CmdRunPDFScript) {
             return CommandVisibility::Hide;
         }
     }
@@ -786,7 +799,8 @@ CommandVisibility GetCommandVisibility(int cmdId, const AppCommandCtx& ctx, Comm
         return CommandVisibility::Hide;
     }
 
-    if ((cmdId == CmdToggleTrimEmptyMargins || cmdId == CmdTrimPagesToSelection || cmdId == CmdShowWholePages) &&
+    if ((cmdId == CmdToggleTrimEmptyMargins || cmdId == CmdTrimPagesToSelection || cmdId == CmdShowWholePages ||
+         cmdId == CmdToggleReadColumns || cmdId == CmdToggleColumnsWholePage) &&
         !ctx.isFixedPage) {
         return CommandVisibility::Hide;
     }

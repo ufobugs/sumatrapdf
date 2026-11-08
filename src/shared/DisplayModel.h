@@ -31,6 +31,9 @@ struct PageInfo {
     /* data that is calculated when needed. actual content size within a page (View target) */
     RectF contentBox;
     bool contentBoxCalculated = false;
+    // Read Columns: x of the gutter between the page's two columns, in page units
+    float columnGutterX = 0;
+    bool columnGutterKnown = false;
 
     /* data that changes when zoom and rotation changes */
     /* position and size within total area after applying zoom and rotation.
@@ -189,8 +192,6 @@ struct DisplayModel : DocController {
     bool ViewportReadyForRelayout() const;
 
     Rect GetViewPort() const;
-    bool IsHScrollbarVisible() const;
-    bool IsVScrollbarVisible() const;
     bool NeedHScroll() const;
     bool NeedVScroll() const;
     bool CanScrollRight() const;
@@ -262,6 +263,13 @@ struct DisplayModel : DocController {
     void SetUserCrop(RectF box);
     RectF GetUserCrop() const;
     void SetAutoScrollSpeed(float speed);
+    void SetReadColumns(bool enable);
+    bool GetReadColumns() const;
+    void FitColumnToWindow();
+    void ToggleColumnsWholePage();
+    bool ReadsColumnsNow() const;
+    bool ShowsColumnsWholePage() const;
+    float ColumnGutterX(int pageNo);
     float GetAutoScrollSpeed() const;
     void TrimPagesToRect(int pageNo, RectF rect);
     void SetFreePan(bool enable);
@@ -404,6 +412,17 @@ struct DisplayModel : DocController {
     RectF userCrop;
     // Automatically Scroll px/s for this document; 0: the global setting
     float autoScrollSpeed = 0;
+    // Read Columns: scrolling goes down a page's left column, then its right one
+    bool readColumns = false;
+    bool inColumnScroll = false;
+    // ToggleColumnsWholePage(): the whole page is shown for a moment
+    bool columnsWholePage = false;
+    float columnsZoom = 0;
+    ScrollState columnsScroll;
+    RectF ColumnRect(int pageNo, int col);
+    bool CurrentColumn(int* pageNo, int* col);
+    bool ColumnScroll(int dy, bool changePage);
+    void ShowColumn(int pageNo, int col, bool top);
     // -100..100, applied to rendered pages (see AdjustPagePixmap)
     int brightness = 0;
     int contrast = 0;

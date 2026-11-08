@@ -754,29 +754,6 @@ static void ArenaRelease(Arena* arena) {
     ArenaReleaseMemory(arena, arena->reserved);
 }
 
-static void* ArenaGetAvailableSpaceLocked(Arena* arena, int* bufSizeOut) {
-    if (!bufSizeOut) {
-        return nullptr;
-    }
-
-    Arena* current = arena ? arena->current : nullptr;
-    if (!current) {
-        *bufSizeOut = 0;
-        return nullptr;
-    }
-
-    u64 pos = ArenaAlignPow2(current->pos, 8);
-    if (pos >= current->committed) {
-        *bufSizeOut = 0;
-        return nullptr;
-    }
-
-    u64 available = current->committed - pos;
-    available = std::min<u64>(available, 0x7fffffff);
-    *bufSizeOut = (int)available;
-    return (char*)current + pos;
-}
-
 static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
     if (!arena) {
         return nullptr;
@@ -788,6 +765,10 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
     Arena* current = arena->current;
     u64 posPre = ArenaAlignPow2(current->pos, align);
     u64 posPost = posPre + size;
+    // a wrapped sum (e.g. a negative int size) would move pos backwards
+    if (posPost < posPre) {
+        return nullptr;
+    }
 
     u64 sizeToZero = 0;
     if (zero && current->committed > posPre) {
@@ -1026,63 +1007,6 @@ void RestoreArenaSavepoint(ArenaSavepoint temp) {
     }
 }
 
-// ArenaPtrCompress / ArenaPtrUncompress: store a pointer as a u32 offset from
-// the first block in the arena chain. The head has basePos 0; each chained
-// block has basePos = sum of previous blocks' reserved. nullptr compresses to 0.
-// Pointers must belong to this arena (any block). Offsets beyond u32 fail.
-
-// Walk current -> prev to find the block whose reserved range contains ptr.
-static Arena* ArenaFindBlockContaining(Arena* arena, const void* ptr) {
-    for (Arena* block = arena->current; block; block = block->prev) {
-        char* base = (char*)block;
-        if ((const char*)ptr >= base && (const char*)ptr < base + block->reserved) {
-            return block;
-        }
-    }
-    return nullptr;
-}
-
-// Walk current -> prev to find the block whose basePos range contains offset.
-static Arena* ArenaFindBlockForOffset(Arena* arena, u64 offset) {
-    for (Arena* block = arena->current; block; block = block->prev) {
-        if (offset >= block->basePos && offset < block->basePos + block->reserved) {
-            return block;
-        }
-    }
-    return nullptr;
-}
-
-u32 ArenaPtrCompress(Arena* arena, void* ptr) {
-    if (!arena || !ptr) {
-        return 0;
-    }
-    ScopedMutex cs(&arena->lock);
-    Arena* block = ArenaFindBlockContaining(arena, ptr);
-    if (!block) {
-        ReportIf(true);
-        return 0;
-    }
-    u64 off = block->basePos + (u64)((char*)ptr - (char*)block);
-    if (off > 0xffffffffull) {
-        ReportIf(true);
-        return 0;
-    }
-    return (u32)off;
-}
-
-void* ArenaPtrUncompress(Arena* arena, u32 compressed) {
-    if (!arena || compressed == 0) {
-        return nullptr;
-    }
-    ScopedMutex cs(&arena->lock);
-    Arena* block = ArenaFindBlockForOffset(arena, compressed);
-    if (!block) {
-        ReportIf(true);
-        return nullptr;
-    }
-    return (char*)block + (compressed - block->basePos);
-}
-
 void* Arena::Alloc(int size) {
     if (size <= 0) {
         return nullptr;
@@ -1098,46 +1022,6 @@ void Arena::Reset() {
     ArenaPopToLocked(this, 0);
     nAllocsSinceReset = 0;
     peakBytesSinceReset = 0;
-}
-
-void* Arena::GetAvailableSpace(int* bufSizeOut) {
-    if (!this) {
-        if (bufSizeOut) {
-            *bufSizeOut = 0;
-        }
-        return nullptr;
-    }
-
-    lock.Lock();
-    void* mem = ArenaGetAvailableSpaceLocked(this, bufSizeOut);
-    lock.Unlock();
-    return mem;
-}
-
-void* Arena::CommitReserved(void* mem, int size) {
-    if (size <= 0) {
-        return nullptr;
-    }
-
-    lock.Lock();
-
-    int availSize = 0;
-    void* availMem = ArenaGetAvailableSpaceLocked(this, &availSize);
-    if (mem == availMem && size <= availSize) {
-        void* committed = ArenaPushLocked(this, (u64)size, 8, false);
-        lock.Unlock();
-        return committed;
-    }
-
-    void* dst = ArenaPushLocked(this, (u64)size, 8, false);
-    lock.Unlock();
-    if (!dst) {
-        return nullptr;
-    }
-    if (mem) {
-        memcpy(dst, mem, (size_t)size);
-    }
-    return dst;
 }
 
 // size_t overloads that match the legacy Allocator::* static helper API
@@ -1368,6 +1252,10 @@ NO_INLINE bool VecReserveNT(Arena* arena, VecNonTemplated* v, int elSize, int wa
 
 NO_INLINE void* VecInsertSpaceNT(VecNonTemplated* v, int elSize, int idx, int count) {
     int len = v->len;
+    // idx may be past the end (the gap is zeroed) but not before the start
+    if (ReportIf(idx < 0 || count < 0 || std::max(len, idx) > INT_MAX - count)) {
+        return nullptr;
+    }
     int newLen = std::max(len, idx) + count;
     if (!VecReserveNT(nullptr, v, elSize, newLen)) {
         return nullptr;
@@ -1402,6 +1290,9 @@ NO_INLINE bool VecResizeNT(VecNonTemplated* v, int elSize, int newSize) {
 
 NO_INLINE void VecRemoveAtNT(VecNonTemplated* v, int elSize, int idx, int count) {
     int len = v->len;
+    if (ReportIf(idx < 0 || count < 0 || idx > len - count)) {
+        return;
+    }
     char* els = (char*)v->els;
     if (len > idx + count) {
         char* dst = els + ((size_t)idx * (size_t)elSize);
@@ -1417,8 +1308,7 @@ NO_INLINE void VecRemoveAtNT(VecNonTemplated* v, int elSize, int idx, int count)
 // VecRemoveAtNT but does not keep the order
 NO_INLINE void VecRemoveAtFastNT(VecNonTemplated* v, int elSize, int idx) {
     int len = v->len;
-    ReportIf(idx >= len);
-    if (idx >= len) {
+    if (ReportIf(idx < 0 || idx >= len)) {
         return;
     }
     char* els = (char*)v->els;
@@ -1735,9 +1625,6 @@ int NormalizeWSInPlace(WStr s) {
 #define _stricmp strcasecmp
 #define _strnicmp strncasecmp
 #endif
-
-// StrArena: u32 handle from ArenaPtrCompress. Arena layout is unsigned LEB128
-// length, length bytes of payload, trailing 0 for C APIs. 0 is the null handle.
 
 // Unicode lowercase for one BMP code unit. ASCII is a fast path; Windows uses
 // CharLowerW, other platforms a Latin/Cyrillic/Greek table then towlower.
@@ -2410,15 +2297,6 @@ int IndexOf(Str buf, Str toFind) {
     return -1;
 }
 
-// offset just past the first occurrence of needle in s, or -1 if not found
-int IndexOfAfter(Str s, Str needle) {
-    int idx = IndexOf(s, needle);
-    if (idx < 0) {
-        return -1;
-    }
-    return idx + needle.len;
-}
-
 // Splits s around the first occurrence of sep (Go's strings.Cut). When sep is
 // found, *before is the text before it and *after the text after it; returns
 // true. When sep is not found, *before is all of s, *after is {} and it returns
@@ -2551,7 +2429,7 @@ constexpr char kLF = '\n';
 
 // kCR kLF and a lone kCR become kLF, in place: the result is never longer.
 // Empty lines are preserved.
-// s must own a writeable, nul-terminated buffer.
+// s must be writeable; it may be a view into a larger string.
 int NormalizeNewlinesToLFInPlace(Str& s) {
     if (len(s) == 0) {
         return 0;
@@ -2569,7 +2447,10 @@ int NormalizeNewlinesToLFInPlace(Str& s) {
         }
         s.s[dst++] = c;
     }
-    s.s[dst] = 0;
+    // only when it shrank: s may be a view, and s.s[len] isn't ours to write
+    if (dst < s.len) {
+        s.s[dst] = 0;
+    }
     s.len = dst;
 
     return dst;
@@ -3117,22 +2998,6 @@ TempStr MimeTypeFromExtTemp(Str ext, Str imgExt) {
 }
 
 // unsigned LEB128 of zigzag-encoded i64
-static int VarIntEncode(u8* dst, i64 val) {
-    u64 n = ((u64)val << 1) ^ (u64)(val >> 63);
-    int i = 0;
-    for (;;) {
-        u8 b = (u8)(n & 0x7f);
-        n >>= 7;
-        if (n) {
-            b |= 0x80;
-        }
-        dst[i++] = b;
-        if (!n) {
-            return i;
-        }
-    }
-}
-
 static bool VarIntDecode(const u8*& p, i64* out) {
     u64 n = 0;
     int shift = 0;
@@ -3160,18 +3025,6 @@ static int SeqStrNumEntryEndOff(SeqStrNum strs, int off) {
         p++;
     }
     return next + (int)(p - (const u8*)(strs + next)) + 1;
-}
-
-void SeqStrNumAppend(str::Builder* b, Str s, i64 num) {
-    b->Append(s);
-    b->AppendChar('\0');
-    u8 buf[12];
-    int n = VarIntEncode(buf, num);
-    b->Append(Str((char*)buf, n));
-}
-
-void SeqStrNumFinish(str::Builder* b) {
-    b->AppendChar('\0');
 }
 
 TempStr SeqStrNumAt(SeqStrNum strs, int off, i64* numOut) {
@@ -3206,13 +3059,14 @@ bool SeqStrNumAdvance(SeqStrNum strs, int& off, int* idxInOut) {
     return true;
 }
 
-static int SeqStrNumIndexBy(SeqStrNum strs, Str toFind, i64* numOut, bool (*eq)(Str, Str)) {
+// index of toFind (compared with str::EqIS), its number in *numOut; -1 if missing
+int SeqStrNumIndexIS(SeqStrNum strs, Str toFind, i64* numOut) {
     if (len(toFind) == 0) {
         return -1;
     }
     int off = 0;
     for (int idx = 0; strs && strs[off]; idx++) {
-        if (eq(SeqStrNumAt(strs, off), toFind)) {
+        if (str::EqIS(SeqStrNumAt(strs, off), toFind)) {
             if (numOut) {
                 SeqStrNumAt(strs, off, numOut);
             }
@@ -3223,26 +3077,6 @@ static int SeqStrNumIndexBy(SeqStrNum strs, Str toFind, i64* numOut, bool (*eq)(
         }
     }
     return -1;
-}
-
-int SeqStrNumIndex(SeqStrNum strs, Str toFind, i64* numOut) {
-    return SeqStrNumIndexBy(strs, toFind, numOut, str::Eq);
-}
-
-int SeqStrNumIndexIS(SeqStrNum strs, Str toFind, i64* numOut) {
-    return SeqStrNumIndexBy(strs, toFind, numOut, str::EqIS);
-}
-
-TempStr SeqStrNumByIndex(SeqStrNum strs, int idx, i64* numOut) {
-    ReportIf(idx < 0);
-    int off = 0;
-    while (idx > 0) {
-        if (!SeqStrNumAdvance(strs, off)) {
-            return {};
-        }
-        idx--;
-    }
-    return SeqStrNumAt(strs, off, numOut);
 }
 
 TempStr SeqStrNumStrByNumber(SeqStrNum strs, i64 num) {
@@ -3358,6 +3192,9 @@ bool BuilderT<C>::AppendNonEmpty(S src) {
 
 template <typename C>
 C BuilderT<C>::RemoveAt(int idx, int count) {
+    if (ReportIf(idx < 0 || count < 0 || idx > this->len - count || count == 0)) {
+        return 0;
+    }
     C res = this->els[idx];
     // VecRemoveAtN() zeroes the chars it frees at the end, so the NUL is there
     VecRemoveAtN(*this, idx, count);
@@ -3426,21 +3263,7 @@ bool IsNonCharacter(WCHAR c) {
 }
 
 } // namespace wstr
-namespace str {
-
-// Reinterpret a UTF-16 byte buffer held in a Str as a WStr without a
-// char*→WCHAR* cast (CodeQL cpp/incorrect-string-type-conversion).
-WStr CastStrToWStr(Str s) {
-    if (len(s) == 0) {
-        return {};
-    }
-    WCHAR* w = nullptr;
-    static_assert(sizeof(char*) == sizeof(WCHAR*), "pointer sizes must match");
-    memcpy((void*)&w, (const void*)&s.s, sizeof(w));
-    return WStr(w, s.len / sizeofi(WCHAR));
-}
-
-} // namespace str
+namespace str {} // namespace str
 namespace wstr {
 
 // return true if s1 == s2, case sensitive
@@ -3639,25 +3462,6 @@ namespace str {
 // UTF-8 Str → fixed WCHAR buffer (converts then BufSet).
 int BufSet(WCHAR* dst, int dstCchSize, Str src) {
     return wstr::BufSet(WStr(dst, dstCchSize), ToWStrTemp(src));
-}
-
-// append as much of s at the end of dst (which must be properly null-terminated)
-// as will fit.
-int BufAppend(Str dst, Str s) {
-    int dstCch = dst.len;
-    ReportIf(0 == dstCch);
-
-    int currDstCchLen = len(dst.s);
-    if (currDstCchLen + 1 >= dstCch) {
-        return 0;
-    }
-    int left = dstCch - currDstCchLen - 1;
-    int toCopy = std::min(left, s.len);
-
-    memcpy(dst.s + currDstCchLen, s.s, (size_t)toCopy);
-    dst.s[currDstCchLen + toCopy] = '\0';
-
-    return toCopy;
 }
 
 } // namespace str
@@ -6065,6 +5869,9 @@ static Str SetOrInsertAt(StrVec* v, int idx, Str s, PageOpResult (StrVecPage::*o
 // note: this might invalidate previously returned strings because
 // it might re-allocate memory used for those strings
 Str StrVec::SetAt(int idx, Str s) {
+    if (ReportIf(idx < 0 || idx >= size)) {
+        return {};
+    }
     return SetOrInsertAt(this, idx, s, &StrVecPage::SetAt);
 }
 
@@ -6072,6 +5879,9 @@ Str StrVec::SetAt(int idx, Str s) {
 // note: this might invalidate previously returned strings because
 // it might re-allocate memory used for those strings
 Str StrVec::InsertAt(int idx, Str s) {
+    if (ReportIf(idx < 0 || idx > size)) {
+        return {};
+    }
     if (idx == size) {
         return Append(s);
     }
@@ -6081,6 +5891,9 @@ Str StrVec::InsertAt(int idx, Str s) {
 }
 
 static Str RemoveAtHelper(StrVec* v, int idx, Str (StrVecPage::*op)(int)) {
+    if (ReportIf(idx < 0 || idx >= v->size)) {
+        return {};
+    }
     int idxInPage;
     auto* page = PageForIdx(v, PhysIdx(v, idx), &idxInPage);
     Str removed = page->AtStr(idxInPage);
@@ -6131,20 +5944,25 @@ bool StrVec::Remove(Str s) {
 }
 
 Str StrVec::At(int idx) const {
+    // PageForIdx() returns null and sortIndexes is read unchecked past the end
+    if (ReportIf(idx < 0 || idx >= size)) {
+        return {};
+    }
     int idxInPage;
     auto* page = PageForIdx(this, PhysIdx(this, idx), &idxInPage);
     return page->AtStr(idxInPage);
 }
 
 void* StrVec::AtDataRaw(int idx) const {
-    ReportIf(dataSize == 0); // shouldn't call
+    if (ReportIf(dataSize == 0 || idx < 0 || idx >= size)) {
+        return nullptr;
+    }
     int idxInPage;
     auto* page = PageForIdx(this, PhysIdx(this, idx), &idxInPage);
     return page->AtDataRaw(idxInPage);
 }
 
 Str StrVec::operator[](int idx) const {
-    ReportIf(idx < 0);
     return At(idx);
 }
 
@@ -6471,20 +6289,6 @@ static Str WrapAllocatedStr(char* s, int n) {
 }
 #endif
 
-WStr CodePageToWStr(uint codePage, Str s, Arena* a) {
-    if (str::IsNull(s)) return {};
-#if OS_WIN
-    int n = len(s) == 0 ? 0 : MultiByteToWideChar(codePage, 0, s.s, len(s), nullptr, 0);
-    WCHAR* res = AllocArray<WCHAR>(a, n + 1);
-    if (!res) return {};
-    if (n > 0) MultiByteToWideChar(codePage, 0, s.s, len(s), res, n);
-    return WStr(res, n);
-#else
-    TempStr utf8 = IconvTemp(s, codePage, CP_UTF8);
-    return wstr::Dup(a, ToWStrTemp(utf8));
-#endif
-}
-
 WStr Utf8ToWStr(Str s, Arena* a) {
     // subtle: if s.s is nullptr, we return empty. if empty string => we return empty string
     if (str::IsNull(s)) {
@@ -6631,6 +6435,41 @@ TempStr StrToUtf8Temp(Str src, uint codePage) {
     return ToMultiByteTemp(src, codePage, CP_UTF8);
 }
 
+// UTF-16 bytes (no BOM) to UTF-8. Reads code units itself rather than casting
+// to WCHAR, which is 4 bytes on Linux and macOS. Unpaired surrogates become
+// U+FFFD; a trailing odd byte is dropped.
+TempStr Utf16ToUtf8Temp(Str bytes, ByteOrder order) {
+    const u8* b = (const u8*)bytes.s;
+    int n = len(bytes) / 2;
+    // a code unit is at most 3 UTF-8 bytes, a surrogate pair (2 units) 4
+    char* out = AllocArrayTemp<char>(n * 3 + 1);
+    int off = 0;
+    auto unitAt = [&](int i) -> int {
+        int b0 = b[i * 2];
+        int b1 = b[i * 2 + 1];
+        return order == ByteOrder::BigEndian ? (b0 << 8) | b1 : (b1 << 8) | b0;
+    };
+    for (int i = 0; i < n; i++) {
+        int c = unitAt(i);
+        bool isHigh = c >= 0xD800 && c <= 0xDBFF;
+        bool isLow = c >= 0xDC00 && c <= 0xDFFF;
+        if (isHigh && i + 1 < n) {
+            int lo = unitAt(i + 1);
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                c = 0x10000 + ((c - 0xD800) << 10) + (lo - 0xDC00);
+                i++;
+                isHigh = false;
+            }
+        }
+        if (isHigh || isLow) {
+            c = 0xFFFD;
+        }
+        str::Utf8Encode(out, off, c);
+    }
+    out[off] = 0;
+    return Str(out, off);
+}
+
 // tries to convert a string in unknown encoding to utf8, as best
 // as it can
 // caller has to free() it
@@ -6644,21 +6483,11 @@ TempStr UnknownToUtf8Temp(Str s) {
     }
 
     if (str::TrimPrefix(s, Str(kUtf16Bom))) {
-        WStr ws = str::CastStrToWStr(s);
-        return ToUtf8Temp(ws);
+        return Utf16ToUtf8Temp(s, ByteOrder::LittleEndian);
     }
 
     if (str::TrimPrefix(s, Str(kUtf16BeBom))) {
-        // convert from utf16 big endian to utf16
-        WStr ws = str::CastStrToWStr(s);
-        TempWStr tmpW = str::DupTemp(ws);
-        int n = ws.len;
-        u8* bytes = (u8*)tmpW.s;
-        for (int i = 0; i < n; i++) {
-            int idx = i * sizeofi(WCHAR);
-            std::swap(bytes[idx], bytes[idx + 1]);
-        }
-        return ToUtf8Temp(WStr(tmpW.s, n));
+        return Utf16ToUtf8Temp(s, ByteOrder::BigEndian);
     }
 
     // if s is valid utf8, leave it alone
@@ -6687,15 +6516,6 @@ Str AnsiToUtf8(Str src) {
     TempWStr ws = StrCPToWStrTemp(src, CP_ACP);
     Str res = ToUtf8(ws);
     return res;
-}
-
-Str WStrToAnsi(WStr src) {
-    return WStrToCodePage(CP_ACP, src);
-}
-
-Str Utf8ToAnsi(Str s) {
-    TempWStr ws = ToWStrTemp(s);
-    return WStrToAnsi(ws);
 }
 
 } // namespace strconv
@@ -6738,18 +6558,6 @@ void UnpackColor(Color c, u8& r, u8& g, u8& b) {
 }
 
 #if OS_WIN
-// TODO: use AdjustLightness instead to compensate for the alpha?
-Gdiplus::Color Unblend(Color c, u8 alpha) {
-    u8 r, g, b, a;
-    UnpackColor(c, r, g, b, a);
-    u8 ralpha = (u8)((float)alpha * (float)a / 255.f);
-    float falpha = ((float)alpha * (float)a / 255.f);
-    float tmp = 255.0f / (falpha + 0.5f);
-    u8 R = (u8)floorf((float)std::max(r - (255 - ralpha), 0) * tmp);
-    u8 G = (u8)floorf((float)std::max(g - (255 - ralpha), 0) * tmp);
-    u8 B = (u8)floorf((float)std::max(b - (255 - ralpha), 0) * tmp);
-    return {alpha, R, G, B};
-}
 
 Gdiplus::Color GdiRgbFromColor(Color c) {
     u8 r, g, b;
@@ -6757,9 +6565,6 @@ Gdiplus::Color GdiRgbFromColor(Color c) {
     return {r, g, b};
 }
 
-Gdiplus::Color GdiRgbaFromColor(Color c) {
-    return {c};
-}
 #endif
 
 TempStr SerializeColorTemp(Color c) {
@@ -7164,105 +6969,6 @@ void wstr::BuilderUseExternalBuffer(Builder& b, WStr buf) {
 }
 bool wstr::BuilderReserve(Builder& b, int cap) {
     return b.Reserve(cap);
-}
-
-SizeF ToSizeFl(const Size s) {
-    return {(float)s.dx, (float)s.dy};
-}
-
-Size ToSize(const SizeF s) {
-    int dx = (int)floor(s.dx + 0.5);
-    int dy = (int)floor(s.dy + 0.5);
-    return {dx, dy};
-}
-
-static int StrArenaUlebSize(u32 n) {
-    int i = 1;
-    while (n >= 0x80) {
-        n >>= 7;
-        i++;
-    }
-    return i;
-}
-
-static int StrArenaUlebEncode(u8* dst, u32 n) {
-    int i = 0;
-    for (;;) {
-        u8 b = (u8)(n & 0x7f);
-        n >>= 7;
-        if (n) {
-            b |= 0x80;
-        }
-        dst[i++] = b;
-        if (!n) {
-            return i;
-        }
-    }
-}
-
-static bool StrArenaUlebDecode(const u8*& p, u32* out) {
-    u32 n = 0;
-    int shift = 0;
-    for (;;) {
-        u8 b = *p++;
-        n |= (u32)(b & 0x7f) << shift;
-        if (!(b & 0x80)) {
-            *out = n;
-            return true;
-        }
-        shift += 7;
-        if (shift >= 35) {
-            return false;
-        }
-    }
-}
-
-StrArena StrArenaAlloc(Arena* a, int size) {
-    if (!a || size < 0) {
-        return 0;
-    }
-    int vlen = StrArenaUlebSize((u32)size);
-    int total = vlen + size + 1;
-    u8* mem = (u8*)a->Push((u64)total, 1, false);
-    if (!mem) {
-        return 0;
-    }
-    StrArenaUlebEncode(mem, (u32)size);
-    mem[vlen + size] = 0;
-    return ArenaPtrCompress(a, mem);
-}
-
-StrArena StrArenaDupStr(Arena* a, Str s) {
-    if (!a) {
-        return 0;
-    }
-    int size = s.len;
-    size = std::max(size, 0);
-    StrArena sa = StrArenaAlloc(a, size);
-    if (!sa) {
-        return 0;
-    }
-    if (size > 0 && s.s) {
-        Str out = StrArenaToStr(a, sa);
-        memcpy(out.s, s.s, (size_t)size);
-    }
-    return sa;
-}
-
-Str StrArenaToStr(Arena* a, StrArena sa) {
-    if (!a || !sa) {
-        return {};
-    }
-    u8* mem = (u8*)ArenaPtrUncompress(a, sa);
-    if (!mem) {
-        return {};
-    }
-    const u8* p = mem;
-    u32 size = 0;
-    if (!StrArenaUlebDecode(p, &size)) {
-        return {};
-    }
-    return Str((char*)p, (int)size);
 }
 
 namespace str {

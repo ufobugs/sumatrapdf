@@ -55,51 +55,6 @@
 
 #include "SumatraLog.h"
 
-// --- tips and promotions (orig's) -------------------------------------------
-
-static Str sumatraPromos = StrL(R"promos(Try [Edna](https://edna.arslexis.io): a note taking web app for power users.
-Try [MarkLexis](https://marklexis.arslexis.io): a bookmarking web application.
-Try [Sumatra File Manager](https://sumatrafilemanager.com): file manager with super powers.
-Try [Sumatra File Manager Online](https://online.sumatrafilemanager.com): file manager for S3, Dropbox and more.
-)promos");
-
-static Str promoFromServer;
-
-static void EnsureTipsParsed() {
-    if (gTipsParsed) {
-        return;
-    }
-    CollectTipsFromString(sumatraTips, &gTipLines);
-    CollectTipsFromString(sumatraPromos, &gPromoLines);
-    if (len(promoFromServer) > 0) {
-        CollectTipsFromString(promoFromServer, &gPromoLines);
-    }
-    gTipsParsed = true;
-    PickRandomTipOrPromo();
-}
-
-void FreeHomePageTips() {
-    if (gTipsParsed) {
-        gTipLines.Reset();
-        gPromoLines.Reset();
-        gTipsParsed = false;
-    }
-    str::Free(promoFromServer);
-    promoFromServer = {};
-    HomePageInvalidateLayoutCache();
-}
-
-void PickAnotherRandomPromotion() {
-    PickAnotherRandomTip();
-}
-
-void SetPromoString(Str s) {
-    if (len(s) == 0) {
-        return;
-    }
-    str::ReplaceWithCopy(&promoFromServer, s);
-}
-
 // --- the About rows (orig's) -------------------------------------------------
 
 constexpr int kInnerPadding = 8;
@@ -123,7 +78,7 @@ static AboutRow gAboutRows[] = {
     // filled in by AboutSourceRow()
     {StrL("source"), {}, {}},
     {StrL("more software by me"), StrL("Sumatra File Manager"), StrL("https://sumatrafilemanager.com")},
-    {{}, StrL("Sumatra File Manager Online"), StrL("https://online.sumatrafilemanager.com")},
+    {{}, StrL("Sumatra File Manager Web"), StrL("https://web.sumatrafilemanager.com")},
     {{}, {}, {}}};
 
 // the rows from kAboutSoftwareRow on are the other software, in the footer
@@ -153,37 +108,6 @@ constexpr int kAboutNoteMarkDy = 3;
 constexpr int kAboutNoteGap = 8;
 constexpr int kAboutTextFontPx = 13;
 constexpr int kAboutMetaFontPx = 12;
-
-// the line under the rows that says this isn't a release build
-static Str AboutNoteText() {
-#if defined(PRE_RELEASE_VER)
-    return StrL("pre-release build");
-#elif IS_DEBUG
-    return StrL("debug build, for testing only");
-#else
-    return {};
-#endif
-}
-
-static TempStr GetAppVersionTemp() {
-    TempStr s = str::JoinTemp(StrL("v"), currentVersion);
-    bool is64 = sizeof(void*) == 8;
-    s = str::JoinTemp(s, is64 ? StrL(" 64-bit") : StrL(" 32-bit"));
-    if (gIsDebugBuild) {
-        s = str::JoinTemp(s, StrL(" (dbg)"));
-    }
-    return s;
-}
-
-// "26.10.14 64-bit, built Oct 14 2026 01:46"
-static TempStr AboutVersionLineTemp() {
-    bool is64 = sizeof(void*) == 8;
-    Str bits = is64 ? StrL("64-bit") : StrL("32-bit");
-    Str built = StrL(__DATE__ " " __TIME__);
-    // without the seconds
-    built.len = std::max(0, len(built) - 3);
-    return fmt("%s %s, built %s", currentVersion, bits, built);
-}
 
 constexpr Color kCol1 = MkRgb(196, 64, 50);
 constexpr Color kCol2 = MkRgb(227, 107, 35);
@@ -512,36 +436,6 @@ static TempStr HomeSearchQueryTemp(MainWindow* win) {
         return str::DupTemp(FromGpui(gp::InputValue(h->search)));
     }
     return str::DupTemp(h->searchQuery);
-}
-
-// orig's LayoutHomePage's file collection
-static void CollectHomePageFiles(MainWindow* win, Vec<FileState*>& fileStates, StrVec& filterWords) {
-    Vec<FileState*> allFileStates;
-    if (gSettings->homePageSortByFrequentlyRead) {
-        FileHistoryGetFrequencyOrder(allFileStates);
-    } else {
-        FileHistoryGetRecentlyOpenedOrder(allFileStates);
-    }
-
-    TempStr searchQuery = HomeSearchQueryTemp(win);
-    bool hasFilter = len(searchQuery) > 0;
-    if (hasFilter) {
-        SplitFilterToWords(searchQuery, filterWords);
-    }
-    for (int i = 0; i < len(allFileStates); i++) {
-        FileState* fs = allFileStates[i];
-        // a state without a path can't be opened or thumbnailed - don't show it
-        if (len(fs->filePath) == 0) {
-            continue;
-        }
-        if (hasFilter) {
-            TempStr baseName = path::GetBaseNameTemp(fs->filePath);
-            if (!FilterMatches(baseName, filterWords)) {
-                continue;
-            }
-        }
-        VecAppend(fileStates, fs);
-    }
 }
 
 // --- the view ----------------------------------------------------------------
@@ -901,7 +795,7 @@ void HomeView::OnTipBand(HomeView* self, gp::Ctx* cx, const gp::ClickEvent* ev) 
     if (ev->clickCount < 2) {
         return;
     }
-    PickAnotherRandomPromotion();
+    PickAnotherRandomTip();
     HomeNotify(self->win, cx);
 }
 
@@ -1593,7 +1487,7 @@ gp::El* HomePageBuild(MainWindow* win, gp::Ctx* cx) {
     HomePageUI* h = Ui(win);
     VecReset(h->files);
     StrVec filterWords;
-    CollectHomePageFiles(win, h->files, filterWords);
+    CollectHomePageFiles(HomeSearchQueryTemp(win), h->files, filterWords);
     h->filesLaidOut = true;
     int nFiles = len(h->files);
     h->entryCount = nFiles;

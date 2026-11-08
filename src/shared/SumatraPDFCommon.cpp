@@ -111,11 +111,10 @@
 #include "SumatraPDF.h"
 #include "PerfLog.h"
 #include "SumatraPDFCommon.h"
+#include "RestrictedUseConfig.h"
 #include "VirtualDesktop.h"
 
 #include "SumatraLog.h"
-
-constexpr const char* kRestrictionsFileName = "sumatrapdfrestrict.ini";
 
 // in restricted mode, some features can be disabled (such as
 // opening files, printing, following URLs), so that SumatraPDF
@@ -196,13 +195,12 @@ void InitializePolicies(bool restrict) {
 
     static Perm perms[] = {Perm::InternetAccess, Perm::DiskAccess,    Perm::SavePreferences,  Perm::RegistryAccess,
                            Perm::PrinterAccess,  Perm::CopySelection, Perm::FullscreenAccess, Perm::AIChat};
-    static SeqStrings permNames =
-        "InternetAccess\0DiskAccess\0SavePreferences\0RegistryAccess\0PrinterAccess\0CopySelection\0"
-        "FullscreenAccess\0AIChat\0";
+    // names come from the editor's table, so both read and write the same keys
+    static_assert(dimof(perms) == kRestrictedUseFeatureCount);
 
     // enable policies as indicated in sumatrapdfrestrict.ini
     for (int i = 0; i < dimofi(perms); i++) {
-        Str name = SeqStrByIndex(permNames, i);
+        Str name = RestrictedUseFeatureName(i);
         Str val = polsec->GetValue(name);
         if (val && ParseInt(val) != 0) {
             gPolicyRestrictions = gPolicyRestrictions | perms[i];
@@ -336,10 +334,6 @@ int ToolbarModeFromPrefs() {
     return idx;
 }
 
-bool ToolbarModeIsOverlay() {
-    return ToolbarModeFromPrefs() == kToolbarOverlay;
-}
-
 bool ToolbarModeIsHidden() {
     return ToolbarModeFromPrefs() == kToolbarHide;
 }
@@ -453,7 +447,7 @@ void UpdatePageInfoHelper(MainWindow* win, NotificationWnd* wnd, int pageNo) {
     // of the whole document, also for a chaptered ebook
     int percentRead = (pageNo * 100) / std::max(nPages, 1);
     pageInfo = fmt("%s (%d%%)", pageInfo, percentRead);
-    if (win->isFullScreen || win->InPresentation()) {
+    if (win->IsFullScreenOrPresentation()) {
         TempStr fileName = path::GetBaseNameTemp(ctrl->GetFilePath());
         pageInfo = str::JoinTemp(fileName, StrL(kPageInfoSep), pageInfo);
     }
@@ -548,7 +542,7 @@ bool PageInfoBarShown(MainWindow* win) {
     if (!win->IsDocLoaded() || !win->ctrl) {
         return false;
     }
-    return win->presentation != PM_BLACK_SCREEN && win->presentation != PM_WHITE_SCREEN;
+    return win->windowMode != WindowMode::PresentationBlack && win->windowMode != WindowMode::PresentationWhite;
 }
 
 // the left half only changes with the document, and reads the disk and the
@@ -1963,6 +1957,28 @@ void TrimPagesToSelection(MainWindow* win) {
     dm->GoToPage(pageNo, false);
 }
 
+// Read Columns reads one page at a time or pages shown continuously; two pages
+// side by side switch to continuous
+void ToggleReadColumns(MainWindow* win) {
+    DisplayModel* dm = win->AsFixed();
+    if (!dm) {
+        return;
+    }
+    bool enable = !dm->GetReadColumns();
+    dm->SetReadColumns(enable);
+    if (!enable) {
+        return;
+    }
+    DisplayMode mode = dm->GetDisplayMode();
+    if (mode != DisplayMode::Continuous && mode != DisplayMode::SinglePage) {
+        SwitchToDisplayMode(win, DisplayMode::Continuous, false);
+    }
+    dm = win->AsFixed();
+    if (dm) {
+        dm->FitColumnToWindow();
+    }
+}
+
 void ShowWholePages(MainWindow* win) {
     DisplayModel* dm = win->AsFixed();
     if (!dm) {
@@ -2085,8 +2101,7 @@ bool gNextPrevDirReady = false;
 bool gNextPrevDirScanning = false;
 
 void ScheduleReloadTab(WindowTab* tab) {
-    auto fn = MkFunc0<WindowTab>(ReloadTab, tab);
-    uitask::Post(fn, "ReloadTab");
+    PostForTab(tab, ReloadTab, "ReloadTab");
 }
 
 // Called from the AUTO_RELOAD_TIMER tick. Returns true if the file changed
@@ -2300,9 +2315,9 @@ bool TextSelectExtendFromVk(int key, TextSelectUnit& unit, int& delta) {
 }
 
 void ToggleFullScreen(MainWindow* win, bool presentation) {
-    bool enterFullScreen = presentation ? !win->InPresentation() : !win->isFullScreen;
+    bool enterFullScreen = presentation ? !win->InPresentation() : !win->IsFullScreen();
 
-    if (win->InPresentation() || win->isFullScreen) {
+    if (win->IsFullScreenOrPresentation()) {
         ExitFullScreen(win);
     } else {
         RememberDefaultWindowPosition(win);
@@ -2389,7 +2404,7 @@ void RememberClosedWindow(MainWindow* win) {
 // Enter the requested mode even when the window is in the other fullscreen
 // mode, as command-line and DDE requests require.
 void SwitchToFullScreen(MainWindow* win, bool presentation) {
-    if (presentation ? win->isFullScreen : win->InPresentation()) {
+    if (presentation ? win->IsFullScreen() : win->InPresentation()) {
         ExitFullScreen(win);
     }
     EnterFullScreen(win, presentation);
@@ -2547,7 +2562,7 @@ void DeleteCurrentFileAndOpenNext(MainWindow* win) {
 }
 
 void OnMenuViewShowHideToolbar(MainWindow* win) {
-    if (win->isFullScreen) {
+    if (win->IsFullScreen()) {
         int mode = FullscreenToolbarModeFromPrefs();
         int next = kToolbarShow;
         if (mode == kToolbarShow) {
@@ -3092,8 +3107,8 @@ void OnFrameKeyB(MainWindow* win, bool isShift) {
         } else if (!forward && currPage <= ctrl->CurrentPageNo()) {
             win->ctrl->GoToPrevPage();
         }
-    } else if (win->presentation) {
-        win->ChangePresentationMode(PM_BLACK_SCREEN);
+    } else if (win->InPresentation()) {
+        win->ChangePresentationMode(WindowMode::PresentationBlack);
     }
 }
 
@@ -3430,4 +3445,34 @@ void ToggleSidebarAutoHide(CustomCommand* cmd) {
     if (on != gSettings->sidebarAutoHide) {
         ToggleSettingsBool(&gSettings->sidebarAutoHide);
     }
+}
+
+void CreateThumbnailFromFileFinish(CreateThumbnailFromFileData* d) {
+    if (d->bmp) {
+        FileState* fs = FileHistoryFindByPath(d->filePath);
+        SetThumbnail(fs, d->bmp);
+        d->bmp = nullptr;
+        MaybeRedrawHomePage();
+    }
+    delete d;
+}
+
+// Research articles vs slides (issue #4055): portrait -> continuous + fit
+// width, landscape -> single page + fit page. First open only.
+bool ShouldUsePageAspect(Str path) {
+    if (!IsPageAspectDisplayMode(gSettings->defaultDisplayMode)) {
+        return false;
+    }
+    FileType ft = GuessFileTypeFromName(path, true);
+    return ft == FileType::PDF || ft == FileType::Xps || ft == FileType::DjVu || ft == FileType::PS ||
+           ft == FileType::Dvi || ft == FileType::Caj || ft == FileType::Ofd;
+}
+
+void OnTemporaryFileNotifClosed(NotificationClosedEvent* ev) {
+    // closing it means "don't tell me again"
+    if (ev->reason == NotifCloseReason::User) {
+        gSettings->temporaryFileShowNotification = false;
+        ScheduleSaveSettings();
+    }
+    RemoveNotification(ev->wnd);
 }

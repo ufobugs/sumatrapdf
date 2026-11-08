@@ -238,14 +238,6 @@ static TempStr SidebarLayoutResultTemp(int* exitCodeOut) {
                   0);
 }
 
-static LayoutProbeState gLayoutProbe;
-
-static void LayoutProbeAfterLayout(MainWindow* win) {
-    if (gLayoutProbe.active && gLayoutProbe.win == win) {
-        gLayoutProbe.count++;
-    }
-}
-
 static void AppendHwndLayoutRect(str::Builder& out, MainWindow* win, Str name, HWND hwnd) {
     Rect rect;
     if (hwnd) {
@@ -289,7 +281,7 @@ static TempStr LayoutInfoResultTemp(Str action, int* exitCodeOut) {
         gLayoutProbe.win = win;
         gLayoutProbe.count = 0;
         gLayoutProbe.active = true;
-        gAfterLayout = MkFunc1Void(LayoutProbeAfterLayout);
+        gAfterLayout = MkFunc1Void(LayoutProbeNote);
     } else if (str::EqI(action, StrL("stop"))) {
         if (gLayoutProbe.active) {
             gAfterLayout = {};
@@ -555,9 +547,7 @@ enum class ControlCmd : u16 {
     TestInverseSearch = 22,
     TestImageResizeArrowKey = 23,
     TestFindResultPageColumnClip = 24,
-    TestFileKind = 25,
     TestScrollToLink = 26,
-    TestI18nErrorString = 27,
     TestPageInfoOverlay = 28,
     TestGetToc = 29,
     TestPageLinks = 30,
@@ -606,7 +596,6 @@ enum class ControlCmd : u16 {
     TestSelectionToolbar = 73,
     TestMarkupAnnots = 74,
     TestCmykImageSave = 75,
-    TestContextMenuPoint = 76,
     TestFindWindowContents = 77,
     TestFindUiState = 78,
     TestRenderViewPrint = 79,
@@ -631,7 +620,6 @@ enum class ControlCmd : u16 {
     TestReadingBar = 98,
     TestSeedTextSelection = 99,
     TestTtsEngineCrash = 100,
-    StartPerfLog = 101,
     StopPerfLog = 102,
     WaitSessionRestored = 103,
     TestNavFiles = 104,
@@ -703,6 +691,8 @@ enum class ControlCmd : u16 {
     TestMeasurement = 159,
     // [action, pageNo, imageIdx, path]: replace / edit an image embedded in the PDF
     TestImageReplace = 160,
+    // 161, 162: ng only (TestPerfStats, TestOverlayState); tests/lint-control-ids.ts
+    // checks ids mean the same command in both apps and tests/control.ts
 };
 
 static_assert((u16)ControlCmd::Quit == (u16)ControlFrameCmd::Quit);
@@ -1148,31 +1138,11 @@ static void ExecuteControlRequest(ControlRequest* req) {
             break;
         }
 
-        case ControlCmd::TestFileKind: {
-            Str path = StringArg(req, 0);
-            Str expectedKind = StringArg(req, 1);
-            if (len(path) == 0 || len(expectedKind) == 0) {
-                AppendError(req, StrL("TestFileKind expects string path, string expectedKind"));
-                break;
-            }
-            int exitCode = 0;
-            Str res = FileKindResultTemp(path, expectedKind, &exitCode);
-            AppendTestResult(req, exitCode, res);
-            break;
-        }
-
         case ControlCmd::TestScrollToLink: {
             i32 minDelta = 50;
             IntArg(req, 0, minDelta);
             int exitCode = 0;
             Str res = ScrollToLinkResultTemp(minDelta, &exitCode);
-            AppendTestResult(req, exitCode, res);
-            break;
-        }
-
-        case ControlCmd::TestI18nErrorString: {
-            int exitCode = 0;
-            Str res = I18nErrorStringResultTemp(&exitCode);
             AppendTestResult(req, exitCode, res);
             break;
         }
@@ -1630,18 +1600,6 @@ static void ExecuteControlRequest(ControlRequest* req) {
             break;
         }
 
-        case ControlCmd::TestContextMenuPoint: {
-            Str name = StringArg(req, 0);
-            int cmdId = GetCommandIdByName(name);
-            if (cmdId <= 0) {
-                AppendError(req, StrL("TestContextMenuPoint expects a command name"));
-                break;
-            }
-            Str res = CommandUsesContextMenuPoint(cmdId) ? StrL("1") : StrL("0");
-            AppendTestResult(req, 0, res);
-            break;
-        }
-
         case ControlCmd::TestMarkdownTocNavigate: {
             i32 destNo = 0;
             i32 minScrollY = 1;
@@ -1881,22 +1839,8 @@ static void ExecuteControlRequest(ControlRequest* req) {
         }
 
         case ControlCmd::TestVirtTree: {
-            Str action = StringArg(req, 0);
             str::Builder out;
-            if (str::Eq(action, StrL("hit"))) {
-                Str cls = StringArg(req, 1);
-                i32 x = 0;
-                i32 y = 0;
-                if (len(cls) == 0 || !IntArg(req, 2, x) || !IntArg(req, 3, y)) {
-                    AppendError(req, StrL("TestVirtTree hit expects string class, int x, int y"));
-                    break;
-                }
-                if (!AppendVirtHit(out, cls, x, y)) {
-                    out.Append(StrL("NONE\n"));
-                }
-            } else {
-                AppendVirtTreeDump(out, action);
-            }
+            AppendVirtTreeDump(out, StringArg(req, 0));
             AppendTestResult(req, 0, ToStrTemp(out));
             break;
         }
@@ -2319,11 +2263,6 @@ static void ExecuteControlRequest(ControlRequest* req) {
             AppendTestResult(req, exitCode, res);
             break;
         }
-
-        case ControlCmd::StartPerfLog:
-            StartPerfLog();
-            AppendTestResult(req, 0, StrL("OK"));
-            break;
 
         case ControlCmd::StopPerfLog:
             StopPerfLog();

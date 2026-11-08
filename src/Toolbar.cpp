@@ -472,6 +472,9 @@ void SetPdfAnnotationsToolbarEnabled(MainWindow* win, bool enabled) {
     ScheduleRepaint(win, 0);
 }
 
+// space left and right of the toolbar's button rows
+constexpr int kToolbarRowPadX = 4;
+
 // natural width of the toolbar content (buttons + page box); the find bar
 // floats separately so the page-total label is the rightmost element
 static int ToolbarNaturalWidth(MainWindow* win) {
@@ -492,7 +495,7 @@ static int ToolbarNaturalWidth(MainWindow* win) {
     if (dx <= 0) {
         dx = tb->rowDy * 8;
     }
-    return dx + DpiScale(12);
+    return dx + 2 * DpiScale(kToolbarRowPadX);
 }
 
 // when the overlay toolbar sits at the bottom, lift it above the horizontal
@@ -1159,7 +1162,7 @@ static void OnHoverRowClicked(MainWindow* win, VirtMouseEvent* ev) {
     int cmdId = w->id;
     // the click is being handled by the drop-down's own window, so it can only
     // be torn down once that returns
-    uitask::Post(MkFunc0(PostedHideHoverDropdown, win), "HideToolbarHoverDropdown");
+    PostForWindow(win, PostedHideHoverDropdown, "HideToolbarHoverDropdown");
     ToolbarPostCommand(win, cmdId);
 }
 
@@ -1846,13 +1849,6 @@ static bool IsAnnotColorCmd(int cmdId) {
     return false;
 }
 
-// the color the button's next annotation is made in
-static Color AnnotCurrentColor(int cmdId) {
-    ParsedColor* setting = AnnotPresetColorSetting(cmdId);
-    Color col = setting ? GetParsedColor(*setting, kColorUnset) : kColorUnset;
-    return col != kColorUnset ? col : AnnotDefaultColor(cmdId);
-}
-
 void AnnotPresetColors(int cmdId, Vec<Color>& out) {
     if (Str* list = AnnotPresetColorList(cmdId)) {
         ParseColorList(*list, out, 0);
@@ -1918,7 +1914,7 @@ static void OnAnnotColorClicked(MainWindow* win, VirtMouseEvent* ev) {
         // with text selected, picking a color is also a request to mark it up
         ToolbarPostCommand(win, sw->id);
     }
-    uitask::Post(MkFunc0(PostedHideHoverDropdown, win), "HideToolbarHoverDropdown");
+    PostForWindow(win, PostedHideHoverDropdown, "HideToolbarHoverDropdown");
 }
 
 static void OnAnnotColorsEditClicked(MainWindow* win, VirtMouseEvent* ev) {
@@ -1927,7 +1923,7 @@ static void OnAnnotColorsEditClicked(MainWindow* win, VirtMouseEvent* ev) {
         return;
     }
     int cmdId = w->id;
-    uitask::Post(MkFunc0(PostedHideHoverDropdown, win), "HideToolbarHoverDropdown");
+    PostForWindow(win, PostedHideHoverDropdown, "HideToolbarHoverDropdown");
 
     auto* target = new AnnotColorsTarget();
     target->cmdId = cmdId;
@@ -1935,7 +1931,7 @@ static void OnAnnotColorsEditClicked(MainWindow* win, VirtMouseEvent* ev) {
     auto* args = new ChangeColorsArgs();
     args->win = win;
     args->title = Tr("Annotation Colors");
-    args->color = AnnotCurrentColor(cmdId);
+    args->color = AnnotColorForCmd(cmdId);
     args->withOpacity = true;
     AnnotPresetColors(cmdId, args->colors);
     args->onClose = MkFunc1(AnnotColorsPicked, target);
@@ -2229,7 +2225,7 @@ static void BuildAnnotColorsHoverMenu(MainWindow* win, ToolbarHoverBuildEvent* e
     if (!tb || !setting) {
         return;
     }
-    Color current = AnnotCurrentColor(ev->cmdId);
+    Color current = AnnotColorForCmd(ev->cmdId);
     EnsureAnnotPresetColor(ev->cmdId, current);
     // ink is the one annotation whose width is a choice too
     InkThicknessSlider* slider = nullptr;
@@ -2553,6 +2549,8 @@ static VirtCtrl* MakeToolbarSeparator(int rowDy) {
     return sep;
 }
 
+static Edit* ToolbarCreateLocationEdit(MainWindow* win, PlatformFont* font, int iconDy);
+
 // (re)build the tree of virtual controls the toolbar is made of, one per button
 static void BuildToolbarLayout(MainWindow* win) {
     PopulateToolbarLayout();
@@ -2599,7 +2597,7 @@ static void BuildToolbarLayout(MainWindow* win) {
             box->AddChild(label);
 
             // chapter box: [chapterEdit] / N, hidden unless HasChapters()
-            Edit* chapterEdit = ToolbarCreateChapterEdit(win, tb->platformFont, tb->iconSize);
+            Edit* chapterEdit = ToolbarCreateLocationEdit(win, tb->platformFont, tb->iconSize);
             chapterEdit->SetVisibility(Visibility::Collapse);
             win->chapterEdit = chapterEdit;
             box->AddChild(chapterEdit);
@@ -2623,7 +2621,7 @@ static void BuildToolbarLayout(MainWindow* win) {
             tb->pageLabel2 = label2;
             box->AddChild(label2);
 
-            Edit* pageEdit = ToolbarCreatePageEdit(win, tb->platformFont, tb->iconSize);
+            Edit* pageEdit = ToolbarCreateLocationEdit(win, tb->platformFont, tb->iconSize);
             win->pageEdit = pageEdit;
             box->AddChild(pageEdit);
 
@@ -2706,8 +2704,9 @@ static void BuildToolbarLayout(MainWindow* win) {
 
     auto* root = new VBox();
     root->alignCross = CrossAxisAlign::Stretch;
-    root->AddChild(new Padding(box, Insets{0, DpiScale(4), 0, DpiScale(4)}));
-    tb->annotationRow = new Padding(annotationBox, Insets{0, DpiScale(4), 0, DpiScale(4)});
+    int padX = DpiScale(kToolbarRowPadX);
+    root->AddChild(new Padding(box, Insets{0, padX, 0, padX}));
+    tb->annotationRow = new Padding(annotationBox, Insets{0, padX, 0, padX});
     tb->annotationRow->SetVisibility(Visibility::Collapse);
     root->AddChild(tb->annotationRow);
     tb->host->SetLayout(root);
@@ -2938,12 +2937,8 @@ static void OnLocationEditChar(MainWindow* win, Edit::CharEvent* ev) {
     }
 }
 
-static int PageEditPadL() {
-    return UiEdgeDx();
-}
-
 static int PageEditPadR() {
-    return PageEditPadL() + DpiScale(4);
+    return UiEdgeDx() + DpiScale(4);
 }
 
 static Edit* ToolbarCreateLocationEdit(MainWindow* win, PlatformFont* font, int iconDy) {
@@ -2960,7 +2955,7 @@ static Edit* ToolbarCreateLocationEdit(MainWindow* win, PlatformFont* font, int 
     // the box is as tall as the icons, so without this the digits would sit at
     // its top instead of on the same line as "Page:" and "/ N"
     args.centerTextVert = true;
-    args.marginLeft = PageEditPadL();
+    args.marginLeft = UiEdgeDx();
     args.marginRight = PageEditPadR();
     auto* e = new Edit();
     e->SetColors(TbTextColor(), ThemeWindowControlBackgroundColor());
@@ -2976,14 +2971,6 @@ static Edit* ToolbarCreateLocationEdit(MainWindow* win, PlatformFont* font, int 
     e->idealDy = iconDy;
     e->onChar = MkFunc1(OnLocationEditChar, win);
     return e;
-}
-
-Edit* ToolbarCreatePageEdit(MainWindow* win, PlatformFont* font, int iconDy) {
-    return ToolbarCreateLocationEdit(win, font, iconDy);
-}
-
-Edit* ToolbarCreateChapterEdit(MainWindow* win, PlatformFont* font, int iconDy) {
-    return ToolbarCreateLocationEdit(win, font, iconDy);
 }
 
 // no document: the find edit does nothing, so don't offer a text cursor

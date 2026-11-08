@@ -54,10 +54,6 @@ TabInfo::~TabInfo() {
     str::Free(pageText);
 }
 
-static Gdiplus::Color GdipCol(Color c) {
-    return GdiRgbFromColor(c);
-}
-
 //--- TabCtrl: one tab
 
 // paints the tab (background, title, dirty dot) and hosts its ✕. It doesn't own
@@ -722,7 +718,7 @@ HBITMAP TabsCtrl::RenderForDragging(int idx) {
     Color bgCol = GetColor(kColTabBg);
     Color textCol = TabTextColorForBackground(GetColor(kColTabText), bgCol);
 
-    SolidBrush br(GdipCol(bgCol));
+    SolidBrush br(GdiRgbFromColor(bgCol));
     Gdiplus::Rect gr(0, 0, r.dx, r.dy);
     gfx->FillRectangle(&br, gr);
 
@@ -754,11 +750,11 @@ HBITMAP TabsCtrl::RenderForDragging(int idx) {
         rPage.Width = (float)pageDx;
     }
 
-    br.SetColor(GdipCol(textCol));
+    br.SetColor(GdiRgbFromColor(textCol));
     WCHAR* ws = CWStrTemp(ti->text);
     gfx->DrawString(ws, -1, f, rFile, &sfFile, &br);
     if (pageDx > 0) {
-        br.SetColor(GdipCol(AccentColor(textCol, 40)));
+        br.SetColor(GdiRgbFromColor(AccentColor(textCol, 40)));
         WCHAR* wsPage = CWStrTemp(ti->pageText);
         gfx->DrawString(wsPage, -1, f, rPage, &sfPage, &br);
     }
@@ -1069,6 +1065,12 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_LBUTTONUP: {
+            // end the drag before ReleaseCapture() so WM_CAPTURECHANGED doesn't cancel it
+            bool droppingTab = draggingTab;
+            if (draggingTab) {
+                draggingTab = false;
+                ImageList_EndDrag();
+            }
             bool isDragging = (GetCapture() == hwnd);
             if (isDragging) {
                 ReleaseCapture();
@@ -1085,15 +1087,13 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // update the hover state
             UpdateHover(tabUnderMouse);
 
-            if (!draggingTab) {
+            if (!droppingTab) {
                 LRESULT res = 0;
                 if (vroot) {
                     vroot->OnMessage(msg, wp, lp, res);
                 }
                 return 0;
             }
-            draggingTab = false;
-            ImageList_EndDrag();
             int selectedTab = selectedIdx;
             if (tabUnderMouse < 0) {
                 // migrate to new/different window
@@ -1115,6 +1115,16 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             UpdateAfterDrag(this, selectedTab, dstIdx);
             ScheduleRepaint();
             return 0;
+        }
+
+        case WM_CAPTURECHANGED: {
+            // capture lost mid-drag (Alt+Tab, a dialog): cancel it, or the next
+            // button-up on the strip would drop the tab
+            if (draggingTab) {
+                draggingTab = false;
+                ImageList_EndDrag();
+            }
+            break;
         }
 
         case WM_MBUTTONDOWN: {

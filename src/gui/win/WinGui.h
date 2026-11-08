@@ -11,8 +11,6 @@
 // - onGetXxx members are queries: the event struct carries an out-param the
 //   handler fills in (e.g. VirtCtrl::onGetTooltip), and there is no didHandle.
 
-TempStr WinMsgNameTemp(UINT);
-
 LRESULT TryReflectMessages(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 enum WindowBorderStyle {
     kWindowBorderNone,
@@ -441,6 +439,26 @@ struct WindowBase : HwndBase {
     DestroyHandler onDestroy;
 };
 
+void ReapplyEditFont(Edit* edit, PlatformFont* font);
+void PaintBorderedBar(HwndBase* w, HDC hdc, Color colBg, Color colBorder);
+bool ApplyDpiChangedRect(HWND hwnd, WindowBase::DpiChangedEvent* ev, bool ready);
+
+// for a window with `layout` and UpdateDpi(int)
+template <typename T>
+void HandleDpiChanged(T* w, WindowBase::DpiChangedEvent* ev) {
+    if (ApplyDpiChangedRect(w->hwnd, ev, w->layout != nullptr)) {
+        w->UpdateDpi((int)ev->dpiX);
+    }
+}
+
+// for a bar with UpdateLayout()
+template <typename T>
+void RelayoutIfVisible(T* bar) {
+    if (HwndIsVisible(bar->hwnd)) {
+        bar->UpdateLayout();
+    }
+}
+
 bool PreTranslateMessage(MSG& msg);
 
 // Base of the controls that a layout positions: the win32 controls (Static,
@@ -555,12 +573,7 @@ struct ControlBase : ILayout, HwndBase {
     void SetBounds(Rect) override;
     ControlBase* AsControl() override;
 
-    void SetInsetsPt(int uniform);
-    void SetInsetsPt(int topBottom, int leftRight);
-    void SetInsetsPt(int top, int right, int bottom, int left);
-
     void Attach(HWND hwnd);
-    void AttachDlgItem(UINT id, HWND parent);
 
     // for reflection from parents (WindowBase / ControlBase WndProcDefault)
     bool DispatchCommand(WPARAM wparam, LPARAM lparam);
@@ -958,8 +971,6 @@ struct Trackbar : ControlBase {
 
     Size GetIdealSize() override;
     void SetRange(int min, int max);
-    int GetRangeMin();
-    int getRangeMax();
 
     void SetValue(int);
     int GetValue();
@@ -1059,15 +1070,12 @@ struct TreeView : ControlBase {
     TreeItem GetSelection();
     bool SelectItem(TreeItem ti);
     void ExpandAll();
-    void CollapseAll();
     void Clear();
 
     HTREEITEM GetHandleByTreeItem(TreeItem item);
     void EnsureChildrenPopulated(TreeItem item, HTREEITEM h);
-    TempStr GetDefaultTooltipTemp(TreeItem ti);
     TreeItem GetItemAt(int x, int y);
     TreeItem GetTreeItemByHandle(HTREEITEM item);
-    bool UpdateItem(TreeItem ti);
     void SetTreeModel(TreeModel* tm);
     void SetState(TreeItem item, bool enable);
     bool GetState(TreeItem item);

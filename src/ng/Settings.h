@@ -304,6 +304,10 @@ struct FileState {
     // visibility of the PDF's layers (optional content groups), if
     // changed: 1 (shown) or 0 (hidden) for each layer, in document order
     Str layerStates;
+    // unit name for calibrated measurements
+    Str measurementUnit;
+    // calibrated measurement units per document coordinate; 0 uses points
+    float measurementScale;
     // how often the document was opened, halved every week so that the
     // Frequently Read list reflects what's relevant now instead of what
     // used to be opened a lot
@@ -370,6 +374,9 @@ struct FileState {
     // Automatically Scroll speed for this document, in pixels per second;
     // 0 uses the global ReadingAutoScrollSpeed
     float readingAutoScrollSpeed;
+    // if true, scrolling reads a two-column page down its left column,
+    // then its right one (View / Read Columns)
+    bool readColumns;
 };
 
 // a subset of FileState required for restoring the state of a single
@@ -443,6 +450,10 @@ struct PrinterDefaults {
     // (e.g. 300 for a 300 dpi scan whose file doesn't say); 0 uses the
     // resolution recorded in the file
     float printDpi;
+    // default for the Print dialog's Rotate wide pages to fit the paper:
+    // if true, a page wider than it is tall is turned 90° to fill the
+    // paper
+    bool autoRotate;
 };
 
 // customization options for how forward search results are shown (used
@@ -1215,6 +1226,10 @@ struct Settings {
     // if true and SessionData isn't empty, that session will be restored
     // at startup
     bool restoreSession;
+    // if true, a document of the restored session that no longer exists
+    // keeps its tab, which shows that the file is missing; if false, its
+    // tab is dropped at startup
+    bool keepMissingSessionTabs;
     // if true, open documents in the already running SumatraPDF instead of
     // starting a new one
     bool reuseInstance;
@@ -1247,6 +1262,10 @@ struct Settings {
     // name (or page label); if false (the default), they are sorted by
     // page number
     bool sortFavoritesByName;
+    // if true, favorites within each file keep the order set in Edit
+    // Favorites and new ones are added at the end; set by moving a
+    // favorite there, cleared by Sort By Name
+    bool favoritesManualOrder;
     // if true, show the table of contents (Bookmarks) sidebar when the
     // document has one
     bool showToc;
@@ -1421,7 +1440,7 @@ struct FieldInfo;
 struct StructInfo;
 extern const StructInfo gFavoriteInfo;
 extern const StructInfo gFileEBookUIInfo;
-extern const FieldInfo gFileStateFields[33];
+extern const FieldInfo gFileStateFields[36];
 extern StructInfo gFileStateInfo;
 extern const StructInfo gTabStateInfo;
 extern const StructInfo gSessionDataInfo;

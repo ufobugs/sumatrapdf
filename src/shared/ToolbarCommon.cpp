@@ -127,7 +127,7 @@ TempStr ToolbarTipTemp(int cmdId, Str tip, bool translate) {
 
 // toolbar mode for this window: Fullscreen.Toolbar in fullscreen, else Toolbar
 int ToolbarModeForWindow(MainWindow* win) {
-    if (win->isFullScreen) {
+    if (win->IsFullScreen()) {
         return FullscreenToolbarModeFromPrefs();
     }
     return ToolbarModeFromPrefs();
@@ -365,6 +365,13 @@ Str* AnnotPresetColorList(int cmdId) {
     return (cmdId == CmdCreateAnnotInk) ? &a.inkColors : &a.presetColors;
 }
 
+// the color the button's next annotation is made in
+Color AnnotColorForCmd(int cmdId) {
+    ParsedColor* setting = AnnotPresetColorSetting(cmdId);
+    Color col = setting ? GetParsedColor(*setting, kColorUnset) : kColorUnset;
+    return col != kColorUnset ? col : AnnotDefaultColor(cmdId);
+}
+
 void SetAnnotPresetColor(int cmdId, Color col) {
     ParsedColor* setting = AnnotPresetColorSetting(cmdId);
     if (!setting) {
@@ -547,7 +554,7 @@ void EnablePdfAnnotationsToolbar(MainWindow* win) {
 }
 
 bool ShouldShowToolbar(MainWindow* win) {
-    if (win->presentation || win->isQuickLook) {
+    if (win->InPresentation() || win->isQuickLook) {
         return false;
     }
 #if OS_WASM
@@ -561,7 +568,7 @@ bool ShouldShowToolbar(MainWindow* win) {
 }
 
 bool ShouldOverlayToolbar(MainWindow* win) {
-    if (win->presentation || win->isQuickLook) {
+    if (win->InPresentation() || win->isQuickLook) {
         return false;
     }
     if (ToolbarModeForWindow(win) != kToolbarOverlay) {

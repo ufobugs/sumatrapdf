@@ -282,14 +282,6 @@ WindowTab* MainWindow::CurrentTab() const {
         curr = GetTab(i);
         return curr;
     }
-#if 0
-    int nTabs = TabCount();
-    ReportIf(nTabs > 0);
-    if (nTabs > 0) {
-        curr = GetTab(0);
-        return curr;
-    }
-#endif
     return nullptr;
 }
 
@@ -403,9 +395,11 @@ void MainWindow::RedrawAllIncludingNonClient() const {
                  RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_FRAME | RDW_UPDATENOW);
 }
 
-void MainWindow::ChangePresentationMode(PresentationMode mode) {
-    presentation = mode;
-    if (PM_BLACK_SCREEN == mode || PM_WHITE_SCREEN == mode) {
+// switches between the presentation modes (normal, black, white screen)
+void MainWindow::ChangePresentationMode(WindowMode mode) {
+    ReportIf(!InPresentation() || mode < WindowMode::Presentation);
+    windowMode = mode;
+    if (InBlankPresentation()) {
         DeleteToolTip();
     }
     RedrawAll();
@@ -582,15 +576,11 @@ void LinkHandler::GotoLink(IPageDestination* dest) {
         if (cmd < 1 || cmd > len(menuDest->items)) {
             return;
         }
-        Str chosen = menuDest->items[cmd - 1];
-        Str url = chosen;
-        int colon = str::IndexOf(chosen, StrL(": "));
-        if (colon >= 0) {
-            url = Str(chosen.s + colon + 2, chosen.len - colon - 2);
-            str::TrimWs(url);
-        }
-        if (IsExternalUrl(url) || str::StartsWithI(url, StrL("ftp://"))) {
-            LaunchURL(url);
+        JsMenuAction action = GetJsMenuAction(menuDest, cmd - 1);
+        if (len(action.url) > 0) {
+            LaunchURL(action.url);
+        } else if (action.pageNo > 0 && win->ctrl->ValidPageNo(action.pageNo)) {
+            win->ctrl->GoToPage(action.pageNo, true);
         }
         return;
     }
@@ -620,13 +610,6 @@ void LinkHandler::LaunchFile(Str pathOrig, IPageDestination* remoteLink) {
         /* technically c: is not abs, only c:\\ */
         isAbsPath = true;
     }
-#if 0
-    // we used to not allow absolute links due to security, but if we can open
-    // the doc we should assume we can handle it securely
-    if (isAbsPath) {
-        return;
-    }
-#endif
     if (!isAbsPath) {
         auto dir = path::GetDirTemp(win->ctrl->GetFilePath());
         fullPath = path::JoinTemp(dir, path);
@@ -724,109 +707,18 @@ void SelectTocItemInTree(MainWindow* win, TocItem* tocItem) {
     win->tocKeepSelection = false;
 }
 
-static void PopulateTabCloseFlags(AppCommandCtx& ctx) {
-    if (!ctx.win) {
-        return;
-    }
-
-    int nTabs = ctx.win->TabCount();
-    ctx.nTabs = nTabs;
-    SetTabCloseFlags(ctx);
-}
-
-AppCommandCtx NewAppCommandCtx(MainWindow* win, Point cursorPos) {
-    AppCommandCtx ctx;
-    ctx.win = win;
-    ctx.cursorPos = cursorPos;
-    if (!win) {
-        return ctx;
-    }
-
-    ctx.tab = win->CurrentTab();
-    ctx.isDocLoaded = win->IsDocLoaded();
-    ctx.filePath = ctx.tab ? ctx.tab->filePath : Str();
-    ctx.hasOpenDocuments = HasOpenedDocuments(win);
+void FillAppCommandCtx(AppCommandCtx& ctx, MainWindow* win) {
     ctx.ttsAvailable = true;
     ctx.shellIntegrationInstalled = IsOurExeInstalled();
-    ctx.debugDpiOverrideAvailable = true;
-
-    if (ctx.tab) {
-        ctx.autoScrollOn = ctx.tab->autoScroll.on;
-        ctx.readingBarOn = ctx.tab->readingBar.on;
-        ctx.isChm = ctx.tab->AsChm() || ctx.tab->AsMarkdown();
-        Str currentPath = win->ctrl ? win->ctrl->GetFilePath() : ctx.filePath;
-        ctx.isMarkdown = str::EndsWithI(currentPath, StrL(".md")) || str::EndsWithI(currentPath, StrL(".markdown"));
-        EngineBase* engine = ctx.tab->GetEngine();
-        ctx.isCbx = engine && engine->kind == kindEngineComicBooks;
-        ctx.isImageCollection = engine && engine->isImageCollection;
-        ctx.isEpub = IsEpubDoc(ctx.tab);
-        ctx.isOfd = engine && EngineMupdfIsOfd(engine);
-        ctx.isReflowable = engine && engine->isReflowable;
-        ctx.engineKind = ctx.tab->GetEngineType();
-        ctx.engineHasErrors = engine && engine->HasErrors();
-#ifndef DISABLE_DOCUMENT_RESTRICTIONS
-        ctx.allowsPrinting = !win->AsFixed() || (engine && engine->AllowsPrinting());
-#endif
-        ctx.isPdf = IsPdfDoc(ctx.tab);
-        if (ctx.isPdf && engine) {
-            ctx.isPdfEncrypted = EngineMupdfIsEncrypted(engine);
-        }
-        ctx.canContinueReadAloud = CanContinueReadAloud(ctx.tab);
-        ctx.hideAnnotations = ctx.tab->hideAnnotations;
-        ctx.selectedAnnotation = ctx.tab->selectedAnnotation;
-    }
-
-    ctx.isSpeaking = TtsIsSpeaking();
     ctx.clipboardHasImage = IsClipboardFormatAvailable(CF_BITMAP);
     ctx.hasSignatures = TabHasSignatures(ctx.tab);
     ctx.hasLayers = TabHasLayers(ctx.tab);
-    ctx.aiChatAvailable = IsAIChatAvailable();
-    ctx.aiChatSupported = IsAIChatSupportedForTab(ctx.tab);
-    ctx.grokInstalled = IsBackendInstalled(AIChatBackend::Grok);
-    ctx.claudeInstalled = IsBackendInstalled(AIChatBackend::Claude);
-    ctx.codexInstalled = IsBackendInstalled(AIChatBackend::Codex);
-    ctx.antiGravityInstalled = IsBackendInstalled(AIChatBackend::AntiGravity);
-    ctx.hasSelection = ctx.isDocLoaded && ctx.tab && win->showSelection && ctx.tab->selectionOnPage;
+    EngineBase* engine = ctx.tab ? ctx.tab->GetEngine() : nullptr;
+    ctx.isOfd = engine && EngineMupdfIsOfd(engine);
+}
 
-    if (ctx.isDocLoaded && win->ctrl) {
-        ctx.isSinglePage = IsSingle(win->ctrl->GetDisplayMode());
-        ctx.pageCount = win->ctrl->PageCount();
-        ctx.hasToc = win->ctrl->HasToc();
-    }
-
-    DisplayModel* dm = win->AsFixed();
-    if (dm) {
-        ctx.isFixedPage = true;
-        EngineBase* engine = dm->GetEngine();
-        ctx.hasTextSelection = ctx.hasSelection && len(dm->textSelection->result) > 0;
-        ctx.hasDrawnRectSelection = ctx.hasSelection && IsDrawnRectSelection(win);
-        ctx.supportsAnnots = EngineSupportsAnnotations(engine);
-        ctx.hasUnsavedAnnotations = EngineHasUnsavedAnnotations(engine);
-        ctx.hasRedactMarks = EngineHasRedactMarksNoWait(engine);
-        ctx.hasUserRedactMarks = EngineHasUserRedactMarks(engine);
-        ctx.canUndo = EngineMupdfCanUndoNoWait(engine);
-        ctx.canRedo = EngineMupdfCanRedoNoWait(engine);
-        ctx.isCursorOnPage = dm->GetPageNoByPoint(cursorPos) > 0;
-        ctx.annotationUnderCursor = dm->GetAnnotationAtPos(cursorPos, nullptr);
-        IPageElement* pageEl = dm->GetElementAtPos(cursorPos, nullptr);
-        if (pageEl) {
-            Str value = pageEl->GetValue();
-            ctx.cursorOnLinkTarget = pageEl->Is(kindPageElementDest) && PageDestHasAddress(pageEl->AsLink());
-            ctx.cursorOnComment = value && pageEl->Is(kindPageElementComment);
-            ctx.cursorOnImage = pageEl->Is(kindPageElementImage);
-        }
-        if (ctx.annotationUnderCursor) {
-            ctx.cursorOnComment = !str::IsEmptyOrWhiteSpace(Contents(ctx.annotationUnderCursor));
-        }
-    }
-
-    if (!CanAccessDisk()) {
-        ctx.supportsAnnots = false;
-        ctx.hasUnsavedAnnotations = false;
-    }
-
-    PopulateTabCloseFlags(ctx);
-    return ctx;
+Annotation* AnnotationUnderCursor(MainWindow*, DisplayModel* dm, Point cursorPos) {
+    return dm->GetAnnotationAtPos(cursorPos, nullptr);
 }
 
 // a debugging aid: flip it (in the source or the debugger) to get a small

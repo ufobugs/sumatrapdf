@@ -114,6 +114,7 @@ void ShowViewModeNotification(MainWindow* win, int cmdId);
 void ZoomToSelection(MainWindow* win);
 void TrimPagesToSelection(MainWindow* win);
 void ShowWholePages(MainWindow* win);
+void ToggleReadColumns(MainWindow* win);
 bool IsManualDocHtmlPage(Str path);
 Str ManualInjectThemeCss(Str html);
 TempStr DocURIToWebUrlTemp(Str docURI);
@@ -194,6 +195,8 @@ bool SetupPluginMode(Flags& i);
 void OnFrameKeyB(MainWindow* win, bool isShift);
 EngineBase* CreateEngineForThumbnail(Str path);
 void CreateThumbnailFromFileFinish(CreateThumbnailFromFileData* d);
+bool ShouldUsePageAspect(Str path);
+void OnTemporaryFileNotifClosed(NotificationClosedEvent* ev);
 
 constexpr const char* kSumatraWindowTitle = "SumatraPDF";
 

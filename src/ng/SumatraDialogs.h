@@ -104,7 +104,6 @@ void ShowSavePathDialog(SavePathArgs* args);
 void CloseSavePathDialog();
 bool IsSavePathDialogVisible();
 // -dbg-control's stand-in for picking a name in the dialog ({} is Cancel)
-bool TestFinishSavePathDialog(Str path);
 gpui::El* SavePathDialogBuild(MainWindow* win, gpui::Ctx* cx);
 
 void ShowGoToPageDialog(MainWindow* win);
@@ -113,6 +112,7 @@ bool IsGoToPageDialogVisible();
 gpui::El* GoToPageDialogBuild(MainWindow* win, gpui::Ctx* cx);
 
 void ShowAddFavoriteDialog(MainWindow* win, Str filePath, int pageNo, Str pageLabel, Str name);
+void ShowEditFavoritesDialog(MainWindow* win);
 void CloseAddFavoriteDialog();
 bool IsAddFavoriteDialogVisible();
 gpui::El* AddFavoriteDialogBuild(MainWindow* win, gpui::Ctx* cx);
@@ -325,11 +325,6 @@ struct Print_Advanced_Data {
           extraRotation(extraRotation) {}
 };
 
-#if OS_WIN
-// dlgTemplate owns the in-memory DLGTEMPLATE and must outlive the property
-// sheet, as orig's RTL template does
-HPROPSHEETPAGE CreatePrintAdvancedPropSheet(Print_Advanced_Data* data, ScopedMem<DLGTEMPLATE>& dlgTemplate);
-#endif
 void ShowPDFScriptDialog(MainWindow* win);
 void ClosePDFScriptDialog();
 bool IsPDFScriptDialogVisible();

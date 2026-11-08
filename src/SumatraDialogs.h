@@ -12,6 +12,7 @@ struct PlatformFont;
 enum class VirtButtonStyle;
 
 void ShowAddFavoriteDialog(MainWindow* win, Str filePath, int pageNo, Str pageLabel, Str name);
+void ShowEditFavoritesDialog(MainWindow* win);
 void ShowAdvancedSettingsDialog(MainWindow* win);
 void ShowConfigureRestrictedUseDialog(MainWindow* win);
 void OpenSettingsFileInEditor();
@@ -112,7 +113,6 @@ struct Print_Advanced_Data {
           extraRotation(extraRotation) {}
 };
 
-HPROPSHEETPAGE CreatePrintAdvancedPropSheet(Print_Advanced_Data* data);
 void ShowPDFScriptDialog(MainWindow* win);
 TempStr PDFScriptTestTemp(Str action, int idx, int* exitCodeOut);
 
@@ -129,7 +129,6 @@ VirtText* NewDlgCaption(Str s, PlatformFont* font, Color col);
 ILayout* NewDlgUnderlined(ILayout* field);
 HBox* NewDlgRow();
 ILayout* NewDlgFooter(VirtButton* cancel, VirtButton* ok, VirtButton* extra = nullptr);
-void SetDlgButtonColors(VirtButton* b, DlgButtonStyle style);
 VirtListBox* NewDlgList(int dpi, PlatformFont* font);
 void SetDlgListColors(VirtListBox* lb);
 ILayout* NewDlgListBox(VirtListBox* lb);

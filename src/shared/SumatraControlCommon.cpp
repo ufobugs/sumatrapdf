@@ -59,6 +59,14 @@
 #include "SumatraControl.h"
 #include "SumatraControlCommon.h"
 
+LayoutProbeState gLayoutProbe;
+
+void LayoutProbeNote(MainWindow* win) {
+    if (gLayoutProbe.active && gLayoutProbe.win == win) {
+        gLayoutProbe.count++;
+    }
+}
+
 // Parts of the -dbg-control channel that orig and ng have in common. ng has no
 // listener thread on wasm, so nothing calls them there.
 #if !OS_WASM
@@ -643,6 +651,17 @@ TempStr FavoriteNavResultTemp(Str action, int pageNo, int* exitCodeOut) {
         GoToNextFavorite(win, false);
     } else if (str::EqI(action, StrL("page"))) {
         // report only
+    } else if (str::EqI(action, StrL("list"))) {
+        // the current file's favorites in order: "OK manual=1 Intro@2,-@1"
+        FileState* fs = FileHistoryFindByPath(win->ctrl->GetFilePath());
+        out.Append(fmt("OK manual=%d ", gSettings->favoritesManualOrder ? 1 : 0));
+        int n = (fs && fs->favorites) ? len(*fs->favorites) : 0;
+        for (int i = 0; i < n; i++) {
+            Favorite* f = (*fs->favorites)[i];
+            out.Append(i > 0 ? StrL(",") : StrL(""));
+            out.Append(fmt("%s@%d", len(f->name) > 0 ? f->name : StrL("-"), ParseStoredPagePos(f->pageNo).pageNo));
+        }
+        return finish({}, 0);
     } else if (ControlFavoritesMenu(win, action, &menuIds)) {
         return finish(menuIds, 0);
     } else {
@@ -783,7 +802,7 @@ TempStr DisplayModeResultTemp(Str action, int* exitCodeOut) {
     Str zoomLabel;
     ZoomToString(&zoomLabel, win->ctrl->GetZoomVirtual(false), nullptr);
     TempStr res = fmt("OK mode=%s presentation=%d fullscreen=%d zoom=%s", mode, win->InPresentation() ? 1 : 0,
-                      win->isFullScreen ? 1 : 0, zoomLabel);
+                      win->IsFullScreen() ? 1 : 0, zoomLabel);
     str::Free(zoomLabel);
     return finish(res, 0);
 }

@@ -104,11 +104,7 @@ bool IsDirectory(Str path) {
 // also remembered for ~4 minutes so later queries fail fast.
 // Non-Windows: no cache (same as an uncached attribute query).
 DWORD GetCachedAttributes(Str path) {
-    struct stat st;
-    if (!StatPath(path, st)) {
-        return (DWORD)-1; // INVALID_FILE_ATTRIBUTES
-    }
-    return (DWORD)st.st_mode;
+    return file::GetAttributes(path);
 }
 
 TempStr NormalizeTemp(Str path) {
@@ -373,37 +369,8 @@ bool WriteAll(FileHandle h, Str data) {
     return true;
 }
 
-// Reads exactly size bytes at offset; a short read (e.g. hitting the end of
-// the file) is a failure. pread() doesn't move the file position, but the
-// Windows implementation does, so callers must not rely on either.
-bool ReadAt(FileHandle h, i64 offset, void* buf, int size) {
-    char* d = (char*)buf;
-    int left = size;
-    while (left > 0) {
-        ssize_t n = pread(h, d, (size_t)left, (off_t)offset);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return false;
-        }
-        if (n == 0) {
-            return false;
-        }
-        d += n;
-        offset += n;
-        left -= (int)n;
-    }
-    return true;
-}
-
 bool Flush(FileHandle h) {
     return fsync(h) == 0;
-}
-
-// Text of the error left behind by the last failed call, for error messages.
-TempStr LastErrorTemp() {
-    return str::DupTemp(Str(strerror(errno)));
 }
 
 bool Exists(Str path) {
@@ -548,14 +515,6 @@ bool Copy(Str dst, Str src, bool dontOverwrite, const CopyProgressCb& cbProgress
             cbProgress.Call(&progress);
         }
     }
-}
-
-FILETIME GetAccessTime(Str path) {
-    struct stat st;
-    if (!StatPath(path, st)) {
-        return {};
-    }
-    return FileTimeFromTimespec(StatAccessTime(st));
 }
 
 bool SetAccessTime(Str path, FILETIME accessTime) {
@@ -829,16 +788,4 @@ TempStr GetDownloadsDirTemp() {
 #endif
     return path::JoinTemp(home, StrL("Downloads"));
 #endif
-}
-
-TempStr ExpandEnvVarTemp(Str varName) {
-    const char* val = getenv(CStrTemp(varName));
-    if (!val) {
-        return {};
-    }
-    return str::DupTemp(Str(val));
-}
-
-TempStr ToAbsolutePathTemp(Str path) {
-    return path::NormalizeTemp(path);
 }

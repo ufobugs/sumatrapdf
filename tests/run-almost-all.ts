@@ -20,6 +20,9 @@ import { runNamedTests, runSuiteMain, startSuiteProgress, type NamedTest, type S
 import { setTestWindowLayout } from "./winapi.ts";
 import { beginSharedControlledSession, endSharedControlledSession } from "./win-automation.ts";
 import { testit as lintCommandIds } from "./lint-command-ids.ts";
+import { testit as lintControlIds } from "./lint-control-ids.ts";
+import { testit as lintPostedTasks } from "./lint-posted-tasks.ts";
+import { testit as fontMapCurrent } from "./font-map-current.ts";
 import { testit as issue1909 } from "./issue-1909.ts";
 import { testit as jbig2ResizeOverflow } from "./jbig2-resize-overflow.ts";
 import { testit as issue6468 } from "./issue-6468.ts";
@@ -27,8 +30,7 @@ import { testit as jpegXlPdf } from "./jpeg-xl-pdf.ts";
 import { testit as buildCli } from "./build-cli.ts";
 import { testit as ngEmbedded } from "./ng-embedded.ts";
 import { testit as combiningMarkFirst } from "./combining-mark-first.ts";
-import { testit as parseTipBrackets } from "./parse-tip-brackets.ts";
-import { testit as issue5840 } from "./issue-5840.ts";
+import { testit as appUnitTests } from "./app-unit-tests.ts";
 import { testit as issue5844 } from "./issue-5844.ts";
 import { testit as issue3434 } from "./issue-3434.ts";
 import { testit as cmykImageSave } from "./cmyk-image-save.ts";
@@ -39,10 +41,6 @@ import { testit as issue6346 } from "./issue-6346.ts";
 import { testit as issue6348 } from "./issue-6348.ts";
 import { testit as issue750 } from "./issue-750.ts";
 import { testit as issue6039 } from "./issue-6039.ts";
-import { testit as issue5846 } from "./issue-5846.ts";
-import { testit as issue5941 } from "./issue-5941.ts";
-import { testit as issue2447 } from "./issue-2447.ts";
-import { testit as issue476 } from "./issue-476.ts";
 import { testit as issue5875 } from "./issue-5875.ts";
 import { testit as issue3744 } from "./issue-3744.ts";
 import { testit as issue4986 } from "./issue-4986.ts";
@@ -96,7 +94,6 @@ import { testit as issue5642 } from "./issue-5642.ts";
 import { testit as issue5665 } from "./issue-5665.ts";
 import { testit as issue5677 } from "./issue-5677.ts";
 import { testit as issue5681 } from "./issue-5681.ts";
-import { testit as issue1678 } from "./issue-1678.ts";
 import { testit as issue1724 } from "./issue-1724.ts";
 import { testit as issue2239 } from "./issue-2239.ts";
 import { testit as issue1744 } from "./issue-1744.ts";
@@ -230,6 +227,7 @@ import { testit as toolbarWrap } from "./toolbar-wrap.ts";
 import { testit as reopenClosedWindow } from "./reopen-closed-window.ts";
 import { testit as tabGroupAutoSync } from "./tab-group-autosync.ts";
 import { testit as replaceImage } from "./replace-image.ts";
+import { testit as readColumns } from "./read-columns.ts";
 import { testit as issue6486 } from "./issue-6486.ts";
 import { testit as issue6487 } from "./issue-6487.ts";
 import { testit as issue6488 } from "./issue-6488.ts";
@@ -244,6 +242,9 @@ import { testit as issue6496 } from "./issue-6496.ts";
 import { testit as issue1139 } from "./issue-1139.ts";
 import { testit as issue6497 } from "./issue-6497.ts";
 import { testit as issue6221 } from "./issue-6221.ts";
+import { testit as issue6505 } from "./issue-6505.ts";
+import { testit as issue6506 } from "./issue-6506.ts";
+import { testit as copyJoinLines } from "./copy-join-lines.ts";
 import { testit as issue6477 } from "./issue-6477.ts";
 import { testit as issue6137Contents } from "./issue-6137-contents.ts";
 import { testit as issue6093 } from "./issue-6093.ts";
@@ -333,6 +334,9 @@ import { testit as issue6048 } from "./issue-6048.ts";
 import { testit as issue6053 } from "./issue-6053.ts";
 import { testit as issue6054 } from "./issue-6054.ts";
 import { testit as favoritesMenu } from "./favorites-menu.ts";
+import { testit as editFavorites } from "./edit-favorites.ts";
+import { testit as tocExpandChapter } from "./toc-expand-chapter.ts";
+import { testit as fileMenuSendByEmail } from "./file-menu-send-by-email.ts";
 import { testit as favoritesTabAfterDocumentClose } from "./favorites-tab-after-document-close.ts";
 import { testit as movePolygonPolylineInk } from "./move-polygon-polyline-ink.ts";
 
@@ -391,8 +395,12 @@ import { testit as wheelWhileClosing } from "./wheel-while-closing.ts";
 import { testit as hwheelHome } from "./hwheel-home.ts";
 import { testit as tabMenuClose } from "./tab-menu-close.ts";
 import { testit as chapterNav } from "./chapter-nav.ts";
+import { testit as mouseButtonShortcuts } from "./mouse-button-shortcuts.ts";
 import { testit as issue6483 } from "./issue-6483.ts";
 import { testit as issue6485 } from "./issue-6485.ts";
+import { testit as issue6500 } from "./issue-6500.ts";
+import { testit as fontDownload } from "./font-download.ts";
+import { testit as fontSystemSubstitutes } from "./font-system-substitutes.ts";
 import { testit as printDialogMultiFile } from "./print-dialog-multi-file.ts";
 import { testit as issue6259 } from "./issue-6259.ts";
 import { testit as fullscreenSessionRestore } from "./fullscreen-session-restore.ts";
@@ -426,6 +434,8 @@ import { testit as issue6455 } from "./issue-6455.ts";
 import { testit as issue6459 } from "./issue-6459.ts";
 import { testit as issue6467 } from "./issue-6467.ts";
 import { testit as issue6464 } from "./issue-6464.ts";
+import { testit as issue6502 } from "./issue-6502.ts";
+import { testit as issue6503 } from "./issue-6503.ts";
 import { testit as issue6352 } from "./issue-6352.ts";
 import { testit as issue6354 } from "./issue-6354.ts";
 import { testit as issue6355 } from "./issue-6355.ts";
@@ -553,6 +563,7 @@ export const tests: NamedTest[] = [
   // first: it drives the home page, whose thumbnail selection follows the
   // mouse, so it is the one test that cares what the machine was doing before
   ["issue-5978", issue5978],
+  ["issue-6412", issue6412],
   ["sidebar-thumbnails", sidebarThumbnails],
   ["issue-1909", issue1909],
   ["issue-6474", issue6474],
@@ -724,17 +735,15 @@ export const tests: NamedTest[] = [
 
   // --- no Sumatra process -------------------------------------------------
   ["lint-command-ids", lintCommandIds],
+  ["lint-control-ids", lintControlIds],
+  ["lint-posted-tasks", lintPostedTasks],
+  ["font-map-current", fontMapCurrent],
   ["build-cli", buildCli],
-  ["parse-tip-brackets", parseTipBrackets],
+  ["app-unit-tests", appUnitTests],
   ["combining-mark-first", combiningMarkFirst],
-  ["issue-5840", issue5840],
   ["issue-5844", issue5844],
   ["issue-3434", issue3434],
   ["issue-1809", issue1809],
-  ["issue-5846", issue5846],
-  ["issue-5941", issue5941],
-  ["issue-2447", issue2447],
-  ["issue-476", issue476],
   ["issue-5875", issue5875],
 
   // --- default session: -for-testing + quadrant window + -dbg-control ----
@@ -807,7 +816,6 @@ export const tests: NamedTest[] = [
   ["issue-5665", issue5665],
   ["issue-5677", issue5677],
   ["issue-5681", issue5681],
-  ["issue-1678", issue1678],
   ["issue-1724", issue1724],
   ["issue-2239", issue2239],
   ["issue-1744", issue1744],
@@ -848,6 +856,9 @@ export const tests: NamedTest[] = [
 
   // --- isolated session: -appdata, saveSettings, or own window placement -
   ["favorites-menu", favoritesMenu],
+  ["edit-favorites", editFavorites],
+  ["toc-expand-chapter", tocExpandChapter],
+  ["file-menu-send-by-email", fileMenuSendByEmail],
   ["favorites-tab-after-document-close", favoritesTabAfterDocumentClose],
   ["issue-6045", issue6045],
   ["issue-3744", issue3744],
@@ -943,8 +954,12 @@ export const tests: NamedTest[] = [
   ["hwheel-home", hwheelHome],
   ["tab-menu-close", tabMenuClose],
   ["chapter-nav", chapterNav],
+  ["mouse-button-shortcuts", mouseButtonShortcuts],
   ["issue-6483", issue6483],
   ["issue-6485", issue6485],
+  ["issue-6500", issue6500],
+  ["font-download", fontDownload],
+  ["font-system-substitutes", fontSystemSubstitutes],
   ["print-dialog-multi-file", printDialogMultiFile],
   ["issue-6259", issue6259],
   ["fullscreen-session-restore", fullscreenSessionRestore],
@@ -991,7 +1006,6 @@ export const tests: NamedTest[] = [
   ["issue-6406", issue6406],
   ["issue-6409", issue6409],
   ["issue-6411", issue6411],
-  ["issue-6412", issue6412],
   ["issue-6420", issue6420],
   ["issue-6424", issue6424],
   ["issue-6421", issue6421],
@@ -1044,6 +1058,8 @@ export const tests: NamedTest[] = [
   ["issue-6459", issue6459],
   ["issue-6467", issue6467],
   ["issue-6464", issue6464],
+  ["issue-6502", issue6502],
+  ["issue-6503", issue6503],
   ["issue-3271", issue3271],
   ["issue-6462", issue6462],
   ["issue-6480", issue6480],
@@ -1054,6 +1070,7 @@ export const tests: NamedTest[] = [
   ["reopen-closed-window", reopenClosedWindow],
   ["tab-group-autosync", tabGroupAutoSync],
   ["replace-image", replaceImage],
+  ["read-columns", readColumns],
   ["issue-6486", issue6486],
   ["issue-6487", issue6487],
   ["issue-6488", issue6488],
@@ -1068,6 +1085,9 @@ export const tests: NamedTest[] = [
   ["issue-1139", issue1139],
   ["issue-6497", issue6497],
   ["issue-6221", issue6221],
+  ["issue-6505", issue6505],
+  ["issue-6506", issue6506],
+  ["copy-join-lines", copyJoinLines],
 ];
 
 export async function testit(opts?: SuiteOptions): Promise<void> {

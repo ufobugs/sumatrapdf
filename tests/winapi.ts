@@ -1059,21 +1059,26 @@ const kKeyDown = 0x80;
 // GetKeyState and TranslateAccelerator read. Call the returned function once the
 // app handled the key, to release Shift and detach.
 export function postKeyWithShift(hwnd: number, vk: number): () => void {
+  return postKeyWithModifier(hwnd, vk, VK_SHIFT);
+}
+
+// postKeyWithShift for any modifier (VK_CONTROL for a Ctrl shortcut)
+export function postKeyWithModifier(hwnd: number, vk: number, modVk: number): () => void {
   const appThread = user32.symbols.GetWindowThreadProcessId(hwnd, null);
   const ourThread = kernel32.symbols.GetCurrentThreadId();
   if (!user32.symbols.AttachThreadInput(ourThread, appThread, true)) {
-    throw new Error("postKeyWithShift: AttachThreadInput failed");
+    throw new Error("postKeyWithModifier: AttachThreadInput failed");
   }
   const keys = new Uint8Array(256);
-  const setShift = (down: boolean) => {
+  const setMod = (down: boolean) => {
     user32.symbols.GetKeyboardState(ptr(keys));
-    keys[VK_SHIFT] = down ? kKeyDown : 0;
+    keys[modVk] = down ? kKeyDown : 0;
     user32.symbols.SetKeyboardState(ptr(keys));
   };
-  setShift(true);
+  setMod(true);
   user32.symbols.PostMessageW(hwnd, WM_KEYDOWN, vk, 1);
   return () => {
-    setShift(false);
+    setMod(false);
     user32.symbols.AttachThreadInput(ourThread, appThread, false);
   };
 }
@@ -1600,6 +1605,20 @@ export function injectTouch(x: number, y: number, flag: number): boolean {
 
 // The real cursor position, in screen (physical, when this process is DPI
 // aware) coordinates.
+// Without an interactive desktop (a disconnected RDP session) SetCursorPos
+// fails or the cursor stays put, so a test that hovers by moving the real
+// cursor can't run. Moves it by a pixel and back to find out.
+export function canMoveCursor(): boolean {
+  const was = getCursorPos();
+  const probe = { x: was.x === 1 ? 2 : 1, y: was.y === 1 ? 2 : 1 };
+  if (!setCursorPos(probe.x, probe.y)) {
+    return false;
+  }
+  const now = getCursorPos();
+  setCursorPos(was.x, was.y);
+  return now.x === probe.x && now.y === probe.y;
+}
+
 export function getCursorPos(): { x: number; y: number } {
   if (IS_MAC) {
     return macCursor;

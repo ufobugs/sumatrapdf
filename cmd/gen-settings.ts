@@ -439,6 +439,12 @@ const printerDefaults: Field[] = [
     0,
     "resolution to assume for the document when printing at original size (e.g. 300 for a 300 dpi scan whose file doesn't say); 0 uses the resolution recorded in the file",
   ).ver("3.7"),
+  field(
+    "AutoRotate",
+    Bool,
+    true,
+    "default for the Print dialog's Rotate wide pages to fit the paper: if true, a page wider than it is tall is turned 90° to fill the paper",
+  ).ver("3.7"),
 ];
 
 // HighlightOffset / HighlightWidth are in document units (multiplied by the
@@ -1230,9 +1236,9 @@ const fileState: Field[] = [
     "SidebarView",
     Str,
     null,
-    "what the sidebar's top panel shows: bookmarks (the default), thumbnails or favorites",
+    "what the sidebar's top panel shows: bookmarks (the default), thumbnails, favorites, signatures or layers",
   )
-    .enum(["bookmarks", "thumbnails", "favorites"])
+    .enum(["bookmarks", "thumbnails", "favorites", "signatures", "layers"])
     .emptyMeans("bookmarks")
     .ver("3.7"),
   field("SidebarDx", Int, 0, "width of the bookmarks / favorites sidebar in screen pixels, as last resized"),
@@ -1271,6 +1277,12 @@ const fileState: Field[] = [
     Float,
     0,
     "Automatically Scroll speed for this document, in pixels per second; 0 uses the global ReadingAutoScrollSpeed",
+  ).ver("3.7"),
+  field(
+    "ReadColumns",
+    Bool,
+    false,
+    "if true, scrolling reads a two-column page down its left column, then its right one (View / Read Columns)",
   ).ver("3.7"),
   field(
     "Brightness",
@@ -1357,6 +1369,7 @@ const fileStateLayout = [
   "FacingStepOne",
   "Mirror",
   "ReadingAutoScrollSpeed",
+  "ReadColumns",
 ];
 fileState.sort((a, b) => fileStateLayout.indexOf(a.Name) - fileStateLayout.indexOf(b.Name));
 
@@ -1380,8 +1393,13 @@ const tabState: Field[] = [
     "PointF",
   ),
   field("ShowToc", Bool, true, "if true, the table of contents was shown when the document was closed"),
-  field("SidebarView", Str, null, "what the sidebar's top panel showed: bookmarks, thumbnails or favorites")
-    .enum(["bookmarks", "thumbnails", "favorites"])
+  field(
+    "SidebarView",
+    Str,
+    null,
+    "what the sidebar's top panel showed: bookmarks, thumbnails, favorites, signatures or layers",
+  )
+    .enum(["bookmarks", "thumbnails", "favorites", "signatures", "layers"])
     .emptyMeans("bookmarks")
     .ver("3.7"),
   compactArray("TocState", Int, null, "which table of contents items were expanded (see FileStates -> TocState)"),
@@ -1602,6 +1620,13 @@ const globalPrefs: Field[] = [
       "(SessionData) are reopened at startup",
   ),
   field(
+    "KeepMissingSessionTabs",
+    Bool,
+    true,
+    "if true, a document of the restored session that no longer exists keeps its tab, which shows " +
+      "that the file is missing; if false, its tab is dropped at startup",
+  ).ver("3.7"),
+  field(
     "ReuseInstance",
     Bool,
     true,
@@ -1711,6 +1736,13 @@ const globalPrefs: Field[] = [
     false,
     "if true, favorites within each file are sorted alphabetically by name " +
       "(or page label); if false (the default), they are sorted by page number",
+  ).ver("3.7"),
+  field(
+    "FavoritesManualOrder",
+    Bool,
+    false,
+    "if true, favorites within each file keep the order set in Edit Favorites and new ones are added at the end; " +
+      "set by moving a favorite there, cleared by Sort By Name",
   ).ver("3.7"),
   field("ShowToc", Bool, true, "if true, show the table of contents (Bookmarks) sidebar when the document has one"),
   field(
@@ -2491,6 +2523,7 @@ const globalPrefsLayout = [
   "RememberOpenedFiles",
   "RememberStatePerDocument",
   "RestoreSession",
+  "KeepMissingSessionTabs",
   "ReuseInstance",
   "ShowMenubar",
   "ShowMenubarWithTabs",
@@ -2503,6 +2536,7 @@ const globalPrefsLayout = [
   "ShowFavorites",
   "ShowSidebarMiddle",
   "SortFavoritesByName",
+  "FavoritesManualOrder",
   "ShowToc",
   "AlwaysShowSidebar",
   "ShowThumbnailsIfNoToc",
@@ -2866,7 +2900,9 @@ function buildMetaData(struc: Field, built: Record<string, number>): string {
     metadataExterns.push(`extern ${constStr}StructInfo ${infoName};`);
   }
   lines.push(
-    `${metadataStorage(infoName)}${constStr}StructInfo ${infoName} = { sizeof(${struc.StructName}), ${names.length}, ${fieldsName}, "${namesStr}", "${commentsStr}", ${couldBeTemporary} };`,
+    `${metadataStorage(infoName)}${constStr}StructInfo ${infoName} = { sizeof(${struc.StructName}), (u16)dimof(${fieldsName}), ${fieldsName}, "${namesStr}", "${commentsStr}", ${couldBeTemporary} };`,
+    // the field names are walked fieldCount times: they must match the fields
+    `static_assert(dimof(${fieldsName}) == ${names.length});`,
   );
   return lines.join("\n");
 }

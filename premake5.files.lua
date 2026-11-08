@@ -469,7 +469,6 @@ function sumatrapdf_files()
     "Tabs.*",
     "TabsCommon.*",
     "TabGroupsManage.*",
-    "Tester.*",
     "Tests.cpp",
     "TextSearch.*",
     "TextSelection.*",
@@ -490,19 +489,10 @@ function sumatrapdf_files()
   })
   filter { "configurations:Debug or DebugFull" }
   files_in_dir("src", {
-    "regress/Regress.*",
     "TestPlugin.cpp",
-    "TestPreview.cpp",
   })
   files_in_dir("src/tests", {
     "*.cpp",
-  })
-  files_in_dir("src/testcode", {
-    "test-app.h",
-    "TestApp.cpp",
-    "TestLayout.cpp",
-    --"TestLice.cpp",
-    "TestTab.cpp",
   })
   files_in_dir("src/gui/tests", {
     "*.cpp",
@@ -549,7 +539,6 @@ end
 function base_files()
   files_in_dir("src/base", {
     "ApiHook.*",
-    "AppendStore.*",
     "Archive.*",
     "Base.h",
     "Base.cpp",
@@ -687,6 +676,7 @@ function mupdf_files()
   -- our additions to mupdf (not patches): see src/mupdf/README.md
   files {
     "src/shared/mupdf/fonts_map.c",
+    "src/shared/mupdf/font_common.h",
     "src/shared/mupdf/mupdf_load_system_font.c",
     "src/shared/mupdf/noto_sumatra.c",
     "src/shared/mupdf/noto_sumatra.h",
@@ -1578,12 +1568,15 @@ function test_engines_files()
     "src/shared/gui/UIModels.cpp",
     "src/shared/gui/UIModels.h",
     "src/tools/test_engines.cpp",
+    "src/shared/tools/TestEnginesCommon.cpp",
+    "src/shared/tools/ToolLog.cpp",
   }
 end
 
 function bench_image_files()
   files {
     "src/tools/bench_image.cpp",
+    "src/shared/tools/ToolLog.cpp",
   }
 end
 
@@ -1596,6 +1589,7 @@ end
 function plugin_test_files()
   files {
     "src/shared/tools/plugin-test.cpp",
+    "src/shared/tools/ToolLog.cpp",
   }
 end
 

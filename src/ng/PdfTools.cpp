@@ -63,24 +63,6 @@
 // --- the image formats the two image dialogs offer --------------------------
 
 // PNG / JPEG / BMP / GIF, same core formats as the Save Image dialog
-// ng: orig also carries the GDI+ mime type and the OPENFILENAME default
-// extension; the encoders here are the portable ones of the image editor
-struct ConvertImageFormat {
-    Str label;
-    Str ext; // including the dot, e.g. ".png"
-};
-
-static const ConvertImageFormat kConvertImageFormats[] = {
-    {StrL("PNG"), StrL(".png")},
-    {StrL("JPEG"), StrL(".jpg")},
-    {StrL("BMP"), StrL(".bmp")},
-    {StrL("GIF"), StrL(".gif")},
-};
-
-static int ConvertImageFormatCount() {
-    return dimofi(kConvertImageFormats);
-}
-
 // ng: orig encodes with GDI+; the image editor's host already writes PNG (via
 // zopfli), JPEG (mupdf) and BMP on every platform, so use that
 bool SavePixmapAsImageFile(Pixmap* px, Str path) {
@@ -224,9 +206,7 @@ struct MergeThumb {
 struct MergeThumbCache {
     Vec<MergeThumb> thumbs;
     MainWindow* win = nullptr;
-    AtomicInt cancel = 0;
-    bool workerRunning = false;
-    bool deleteWhenWorkerFinishes = false;
+    BgJob job;
 };
 
 struct MergeSourceDlg {
@@ -447,7 +427,7 @@ static Str ToolTitleFor(PdfToolKind kind) {
         case PdfToolKind::ConvertToPdf:
             return Tr("Convert to PDF");
         case PdfToolKind::ConvertToImages:
-            return Tr("Convert PDF to Images");
+            return Tr("Convert to Images");
         case PdfToolKind::SaveSelectionAsImage:
             return Tr("Save Selection As Image");
         case PdfToolKind::Merge:
@@ -529,20 +509,13 @@ static Str ToolActionText() {
     }
 }
 
-static TempStr InputTextTemp(gp::InputState* s) {
-    if (!s) {
-        return {};
-    }
-    return str::DupTemp(FromGpui(gp::InputValue(s)));
-}
-
 static TempStr DestPathTemp() {
     return InputTextTemp(gTool.destEdit);
 }
 
 static int SelectedFormatIdx() {
     int idx = gTool.ddFormat.sel;
-    if (idx < 0 || idx >= ConvertImageFormatCount()) {
+    if (idx < 0 || idx >= kConvertImageFormatCount) {
         return 0;
     }
     return idx;
@@ -605,10 +578,7 @@ static void DetachMergeThumbs() {
     if (!cache) {
         return;
     }
-    AtomicIntSet(&cache->cancel, 1);
-    if (cache->workerRunning) {
-        cache->deleteWhenWorkerFinishes = true;
-    } else {
+    if (cache->job.Detach()) {
         DeleteMergeThumbs(cache);
     }
 }
@@ -1062,7 +1032,7 @@ static void ConvertPdfToImagesDoIt() {
     DisplayModel* dm = win ? win->AsFixed() : nullptr;
     EngineBase* engine = dm ? dm->GetEngine() : nullptr;
     if (!engine) {
-        MessageBoxWarning(win, StrL("Failed to convert PDF to images."), Tr("Convert PDF to Images"));
+        MessageBoxWarning(win, StrL("Failed to convert to images."), Tr("Convert to Images"));
         return;
     }
 
@@ -1076,7 +1046,7 @@ static void ConvertPdfToImagesDoIt() {
         return;
     }
     if (!PagesFitDpi(engine, pages, dpi)) {
-        MessageBoxWarning(win, Tr("Too large for this DPI"), Tr("Convert PDF to Images"));
+        MessageBoxWarning(win, Tr("Too large for this DPI"), Tr("Convert to Images"));
         return;
     }
 
@@ -1087,7 +1057,7 @@ static void ConvertPdfToImagesDoIt() {
 
     if (nOk == 0) {
         str::Free(firstPath);
-        MessageBoxWarning(win, StrL("Failed to convert PDF to images."), Tr("Convert PDF to Images"));
+        MessageBoxWarning(win, StrL("Failed to convert to images."), Tr("Convert to Images"));
         return;
     }
     logf("ConvertPdfToImages: wrote %d of %d file(s)\n", nOk, len(pages));
@@ -1177,7 +1147,7 @@ static Pixmap* RenderMergeThumb(EngineBase* engine, int pageNo, int rotation) {
 
 static void FinishMergeThumb(MergeThumbResult* result) {
     MergeThumbCache* cache = result->cache;
-    if (!cache->deleteWhenWorkerFinishes && result->thumbIdx >= 0 && result->thumbIdx < len(cache->thumbs)) {
+    if (!cache->job.IsDetached() && result->thumbIdx >= 0 && result->thumbIdx < len(cache->thumbs)) {
         MergeThumb& thumb = cache->thumbs[result->thumbIdx];
         thumb.bitmap = result->bitmap;
         result->bitmap = nullptr;
@@ -1191,8 +1161,7 @@ static void FinishMergeThumb(MergeThumbResult* result) {
 static void StartMergeThumbs();
 
 static void FinishMergeThumbWorker(MergeThumbCache* cache) {
-    cache->workerRunning = false;
-    if (cache->deleteWhenWorkerFinishes) {
+    if (cache->job.Finish()) {
         DeleteMergeThumbs(cache);
         return;
     }
@@ -1208,7 +1177,7 @@ static void RenderMergeThumbs(MergeThumbWorker* worker) {
         engine->Release();
     }
     for (const MergeThumbWorkItem& item : worker->items) {
-        if (AtomicIntGet(&worker->cache->cancel) != 0) {
+        if (worker->cache->job.IsCanceled()) {
             break;
         }
         auto* result = new MergeThumbResult;
@@ -1227,7 +1196,7 @@ static void RenderMergeThumbs(MergeThumbWorker* worker) {
 
 static void StartMergeThumbs() {
     MergeThumbCache* cache = gTool.mergeThumbs;
-    if (!cache || cache->workerRunning) {
+    if (!cache || cache->job.IsRunning()) {
         return;
     }
     auto* worker = new MergeThumbWorker;
@@ -1251,7 +1220,7 @@ static void StartMergeThumbs() {
         delete worker;
         return;
     }
-    cache->workerRunning = true;
+    cache->job.Start();
     RunAsync(MkFunc0<MergeThumbWorker>(RenderMergeThumbs, worker), StrL("MergeThumbnailRender"));
 }
 
@@ -2694,7 +2663,7 @@ static void OnDestPathPicked(PdfToolDlg* tool, SavePathArgs* args) {
     if (HasFormatDropDown() && gTool.win && gTool.win->gpuiWin) {
         // Windows' dialog says which filter was chosen
         int filterIdx = args->filterIndex - 1;
-        if (filterIdx >= 0 && filterIdx < ConvertImageFormatCount()) {
+        if (filterIdx >= 0 && filterIdx < kConvertImageFormatCount) {
             gTool.ddFormat.SetSel(gTool.win->gpuiWin->app, filterIdx);
             SetDestExtFromFormat();
         } else {
@@ -3199,7 +3168,7 @@ static void InitFormatDropDown(MainWindow* win, int sel) {
     gp::App* app = win->gpuiWin ? win->gpuiWin->app : nullptr;
     gTool.ddFormat.Init(app);
     StrVec items;
-    for (int i = 0; i < ConvertImageFormatCount(); i++) {
+    for (int i = 0; i < kConvertImageFormatCount; i++) {
         items.Append(kConvertImageFormats[i].label);
     }
     gTool.ddFormat.SetItems(items, sel);
@@ -3207,7 +3176,8 @@ static void InitFormatDropDown(MainWindow* win, int sel) {
 
 void ShowConvertPdfToImagesDialog(MainWindow* win) {
     ToolScope scope;
-    if (!CanShowToolDialog(win, true)) {
+    // any document with rendered pages, as orig (#6505)
+    if (!CanShowToolDialog(win, false) || !win->AsFixed()) {
         return;
     }
     Str srcPath = win->CurrentTab()->filePath;

@@ -1257,7 +1257,7 @@ static const FileType gImageTypes[] = {
     FileType::Ico
 };
 
-static const char* gImageFormatExts =
+static constexpr SeqStrings gImageFormatExts =
     ".png\0"
     ".jpg\0"
     ".jpeg\0"
@@ -1274,6 +1274,8 @@ static const char* gImageFormatExts =
     ".ico\0"
     "\0";
 // clang-format on
+// GfxFileExtFromTypeTemp() maps an index in one to the same index in the other
+static_assert(SeqStrCount(gImageFormatExts) == dimof(gImageTypes));
 
 TempStr GfxFileExtFromTypeTemp(FileType ft) {
     int idx = FileTypeIndexOf(gImageTypes, dimofi(gImageTypes), ft);
@@ -1425,41 +1427,4 @@ static FileType GuessArchiveType(Archive* archive) {
 FileType GuessFileType(Str path, bool sniff) {
     FileType ft = sniff ? GuessFileTypeFromFile(path) : FileType::Unknown;
     return ft != FileType::Unknown ? ft : GuessFileTypeFromName(path);
-}
-
-// compares the guessed type's canonical extension (the first extension
-// registered for it, e.g. ".pdf" for sample.ai) to expectedExt
-// Headless test helper: compare GuessFileTypeFromName's canonical extension
-// to an expected one (e.g. "sample.ai" -> ".pdf").
-TempStr FileKindResultTemp(Str path, Str expectedExt, int* exitCodeOut) {
-    str::Builder out;
-    auto fail = [&](Str msg) -> Str {
-        out.Append(msg);
-        out.AppendChar('\n');
-        if (exitCodeOut) {
-            *exitCodeOut = 1;
-        }
-        return ToStrTemp(out);
-    };
-
-    if (len(path) == 0 || len(expectedExt) == 0) {
-        return fail(StrL("ERROR missing path or expectedExt"));
-    }
-    FileType ft = GuessFileTypeFromName(path);
-    if (ft == FileType::Unknown) {
-        return fail(StrL("ERROR unknown-kind"));
-    }
-    TempStr ext = GetExtForFileTypeTemp(ft);
-    if (!str::EqI(ext, expectedExt)) {
-        out.Append(fmt("FAIL path=%s got=%s expected=%s\n", path, ext, expectedExt));
-        if (exitCodeOut) {
-            *exitCodeOut = 1;
-        }
-        return ToStrTemp(out);
-    }
-    out.Append(fmt("OK path=%s ext=%s\n", path, ext));
-    if (exitCodeOut) {
-        *exitCodeOut = 0;
-    }
-    return ToStrTemp(out);
 }

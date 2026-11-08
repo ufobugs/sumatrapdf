@@ -151,6 +151,7 @@ static Accel gBuiltInAccelerators[] = {
     {{kShift | kCtrl | kVirt, VK_SUBTRACT}, CmdRotateLeft},
     {{kShift | kCtrl | kVirt, VK_OEM_MINUS}, CmdRotateLeft},
     {{kShift | kCtrl | kVirt, 'T'}, CmdReopenLastClosedFile},
+    {{kCtrl | kVirt, 'T'}, CmdNewTab},
     {{kCtrl | kVirt, VK_NEXT}, CmdNextTab},
     {{kCtrl | kVirt, VK_PRIOR}, CmdPrevTab},
     {{kCtrl | kShift | kVirt, VK_NEXT}, CmdMoveTabRight},
@@ -527,6 +528,23 @@ int SafeAcceleratorCmd(u16 vk, bool ctrl, bool shift, bool alt, bool cmd) {
     return 0;
 }
 
+// Command bound to a virtual key + modifiers, or 0. For keys that don't go
+// through the accelerator table, e.g. mouse side buttons ("Ctrl + XButton1").
+int AcceleratorCmd(u16 vk, bool ctrl, bool shift, bool alt, bool cmd) {
+    u8 mods = kVirt;
+    mods |= cmd ? kCmd : 0;
+    mods |= ctrl ? kCtrl : 0;
+    mods |= shift ? kShift : 0;
+    mods |= alt ? kAlt : 0;
+    for (int i = 0; i < gAccelsCount; i++) {
+        const Accel& a = gAccels[i];
+        if (a.sc.vk == vk && a.sc.Mods() == mods) {
+            return a.cmd;
+        }
+    }
+    return 0;
+}
+
 // the command of an ASCII accelerator ({0, ch}, no modifiers): it matches
 // the typed character, so it works on any keyboard layout
 int AsciiAcceleratorCmd(u32 ch) {
@@ -537,10 +555,6 @@ int AsciiAcceleratorCmd(u32 ch) {
         }
     }
     return 0;
-}
-
-static Str CurrentLangCode() {
-    return trans::GetCurrentLangCode();
 }
 
 namespace {
@@ -701,7 +715,7 @@ static void BuildWinAcceleratorTables() {
 #endif
 
 void CreateSumatraAcceleratorTable() {
-    gShortcutLangCode = CurrentLangCode;
+    gShortcutLangCode = trans::GetCurrentLangCode;
     ReportIf(gAccels);
 
     PatchCreateAnnotEditAccelerators();

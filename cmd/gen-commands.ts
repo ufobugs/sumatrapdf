@@ -294,7 +294,7 @@ const commandsRaw = [
     "CmdInsertImage", "Insert Image...",
     "CmdToggleHighlightFormFields", "Toggle Highlight Form Fields",
     "CmdTogglePageBoxes", "Toggle Page Boxes",
-    "CmdConvertPdfToImages", "Convert PDF to Images...",
+    "CmdConvertPdfToImages", "Convert to Images...",
     "CmdToggleUniformPageWidth", "Toggle Uniform Page Width",
     "CmdToggleTransparencyGrid", "Toggle Transparency Grid",
     "CmdTogglePageGrid", "Toggle Page Grid",
@@ -373,6 +373,13 @@ const commandsRaw = [
     "CmdMeasure", "Measure",
     "CmdReplaceImage", "Replace Image...",
     "CmdEditImageExternally", "Edit Image in Another App",
+    "CmdToggleReadColumns", "Read Columns",
+    "CmdToggleColumnsWholePage", "Read Columns: Show Whole Page",
+    "CmdDebugShowDownloadedFonts", "Debug: Show Downloaded Fonts",
+    "CmdTocExpandChapter", "Bookmarks: Expand Chapter",
+    "CmdTocCollapseChapter", "Bookmarks: Collapse Chapter",
+    "CmdEditFavorites", "Edit Favorites...",
+    "CmdCloseMissingTabs", "Close Tabs of Missing Files",
 ];
 
 // removed slots are dropped: nothing outside the generators should see them

@@ -204,7 +204,7 @@ static bool RequestedTopVisible(MainWindow* win) {
     if (!tab) {
         return false;
     }
-    return win->presentation == PM_ENABLED ? tab->showTocPresentation : tab->showToc;
+    return win->windowMode == WindowMode::Presentation ? tab->showTocPresentation : tab->showToc;
 }
 
 // shows the panels again as they are to be for the current tab
@@ -526,8 +526,8 @@ SidebarPanel* CreateSidebarPanel(MainWindow* win, SidebarPanelKind kind) {
     header->alignMain = MainAxisAlign::MainStart;
     header->alignCross = CrossAxisAlign::CrossCenter;
     using ClickFn = void (*)(SidebarPanel*, VirtMouseEvent*);
-    const ClickFn onClick[kSidebarViewCount] = {OnBookmarksClick, OnThumbnailsClick, OnFavoritesClick,
-                                                OnSignaturesClick, OnLayersClick};
+    const ClickFn onClick[] = {OnBookmarksClick, OnThumbnailsClick, OnFavoritesClick, OnSignaturesClick, OnLayersClick};
+    static_assert(dimof(onClick) == kSidebarViewCount);
     for (int i = 0; i < kSidebarViewCount; i++) {
         auto* b = new VirtIconButton();
         b->onClick = MkFunc1(onClick[i], p);

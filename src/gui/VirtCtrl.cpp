@@ -103,12 +103,6 @@ void VirtCtrl::SetColor(int idx, Color col) {
     colors[idx] = col;
 }
 
-// back to painting in the class's colors
-void VirtCtrl::ResetColors() {
-    free(colors);
-    colors = nullptr;
-}
-
 void VirtCtrl::SetTooltip(Str s) {
     str::ReplaceWithCopy(&tooltip, s);
 }
@@ -611,10 +605,6 @@ HWND VirtCtrl::GetHwnd() const {
     return root ? root->hwnd : nullptr;
 }
 
-bool VirtCtrl::IsPaintable() const {
-    return visibility == Visibility::Visible;
-}
-
 bool VirtCtrl::IsHitTestable() const {
     if (visibility != Visibility::Visible) {
         return false;
@@ -672,21 +662,36 @@ void VirtRoot::SetChild(VirtCtrl* c) {
     delete owned;
     owned = c;
     VecReset(tops);
-    hovered = nullptr;
-    captured = nullptr;
-    focused = nullptr;
-    pressed = nullptr;
     HideTooltip();
     if (c) {
         c->parent = nullptr;
         c->SetRoot(this);
         VecAppend(tops, c);
     }
+    DropStaleInputState();
     // the whole window is this one tree, so it can be laid out lazily, from
     // Paint(). A tree that also holds HWND controls can't: laying out would
     // move child windows in the middle of WM_PAINT
     layoutInPaint = true;
     needsLayout = true;
+}
+
+// after the tree changed: a ctrl that left it loses hover / press / focus /
+// capture the usual way. Nulling the pointers alone left the HWND captured
+// and the ctrl painted as hovered or pressed
+void VirtRoot::DropStaleInputState() {
+    if (hovered && hovered->root != this) {
+        ClearHover();
+    }
+    if (pressed && pressed->root != this) {
+        ClearPressed();
+    }
+    if (captured && captured->root != this) {
+        ReleaseCapture();
+    }
+    if (focused && focused->root != this) {
+        SetFocus(nullptr);
+    }
 }
 
 // the tops let go of this root, unless another root took them since
@@ -703,15 +708,12 @@ void VirtRoot::SetTops(const Vec<VirtCtrl*>& newTops) {
     // a dropped top can outlive this root (e.g. a view that moved elsewhere)
     ForgetTops();
     VecReset(tops);
-    hovered = nullptr;
-    captured = nullptr;
-    focused = nullptr;
-    pressed = nullptr;
     HideTooltip();
     for (VirtCtrl* w : newTops) {
         w->SetRoot(this);
         VecAppend(tops, w);
     }
+    DropStaleInputState();
     layoutInPaint = false;
 }
 
@@ -825,23 +827,6 @@ void AppendVirtTreeDump(str::Builder& out, Str classFilter) {
             AppendVirtCtrl(out, cls, root->hwnd, w, 0);
         }
     }
-}
-
-bool AppendVirtHit(str::Builder& out, Str className, int x, int y) {
-    for (VirtRoot* root : gLiveVirtRoots) {
-        Str cls;
-        if (!VirtRootMatches(root, className, cls)) {
-            continue;
-        }
-        ILayout* el = ElementFromPoint(root, Point{x, y}, nullptr, 0);
-        VirtCtrl* w = el ? el->AsVirtCtrl() : nullptr;
-        if (!w) {
-            continue;
-        }
-        AppendVirtLine(out, cls, root->hwnd, w);
-        return true;
-    }
-    return false;
 }
 
 ILayout* ElementFromPoint(VirtRoot* root, Point ptWindow, Point* ptLocalOut, u32 flags) {
@@ -1482,15 +1467,6 @@ Point VirtScroll::ScrollOffset() {
     return {0, scrollY};
 }
 
-void VirtScroll::SetContentDy(int dy) {
-    if (contentDy == dy) {
-        return;
-    }
-    contentDy = dy;
-    ScrollTo(scrollY);
-    UpdateScrollbar();
-}
-
 int VirtScroll::MaxScrollY() const {
     int visible = bounds.dy - padding.top - padding.bottom;
     int res = contentDy - visible;
@@ -1534,21 +1510,32 @@ void VirtScroll::ScrollIntoView(VirtCtrl* w) {
     }
 }
 
-void VirtScroll::OnMouseWheel(VirtMouseEvent* ev) {
+// scrolls `self` three lines per wheel notch
+template <typename T>
+static void WheelScroll(T* self, VirtMouseEvent* ev) {
     if (ev->wheelDelta == 0) {
         return;
     }
     int lines = -(ev->wheelDelta * 3) / WHEEL_DELTA;
-    if (ScrollBy(lines * lineDy)) {
+    if (self->ScrollBy(lines * self->lineDy)) {
         ev->didHandle = true;
     }
 }
 
+void VirtScroll::OnMouseWheel(VirtMouseEvent* ev) {
+    WheelScroll(this, ev);
+}
+
 // the content follows the finger
-void VirtScroll::OnPan(VirtMouseEvent* ev) {
-    if (ScrollBy(-ev->panDy)) {
+template <typename T>
+static void PanByFinger(T* ctrl, VirtMouseEvent* ev) {
+    if (ctrl->ScrollBy(-ev->panDy)) {
         ev->didHandle = true;
     }
+}
+
+void VirtScroll::OnPan(VirtMouseEvent* ev) {
+    PanByFinger(this, ev);
 }
 
 void VirtScroll::OnVScroll(WPARAM wp) {
@@ -1727,13 +1714,7 @@ bool ScrollBox::ScrollPage(int dir) {
 }
 
 void ScrollBox::OnMouseWheel(VirtMouseEvent* ev) {
-    if (ev->wheelDelta == 0) {
-        return;
-    }
-    int lines = -(ev->wheelDelta * 3) / WHEEL_DELTA;
-    if (ScrollBy(lines * lineDy)) {
-        ev->didHandle = true;
-    }
+    WheelScroll(this, ev);
 }
 
 void ScrollBox::OnVScroll(WPARAM wp) {
@@ -2345,9 +2326,7 @@ void VirtListBox::OnMouseWheel(VirtMouseEvent* ev) {
 
 // the rows follow the finger
 void VirtListBox::OnPan(VirtMouseEvent* ev) {
-    if (ScrollBy(-ev->panDy)) {
-        ev->didHandle = true;
-    }
+    PanByFinger(this, ev);
 }
 
 void VirtListBox::OnDoubleClick(VirtMouseEvent* ev) {
@@ -2446,6 +2425,17 @@ static void RegisterResizeOverlayClass() {
     registered = true;
 }
 
+// The overlay is owned by the top-level window, which takes it down when it
+// closes: drop a handle that is gone or now belongs to another window.
+static void ForgetDeadOverlay(HWND& overlay, HBRUSH brush) {
+    if (!overlay) {
+        return;
+    }
+    if (!IsWindow(overlay) || GetWindowLongPtrW(overlay, GWLP_USERDATA) != (LONG_PTR)brush) {
+        overlay = nullptr;
+    }
+}
+
 VirtSplitter::VirtSplitter() {
     onMouseDown = MkMethod1<VirtSplitter, VirtMouseEvent*, &VirtSplitter::OnMouseDown>(this);
     onMouseUp = MkMethod1<VirtSplitter, VirtMouseEvent*, &VirtSplitter::OnMouseUp>(this);
@@ -2463,6 +2453,7 @@ VirtSplitter::VirtSplitter() {
 }
 
 VirtSplitter::~VirtSplitter() {
+    ForgetDeadOverlay(overlayHwnd, brush);
     if (overlayHwnd) {
         DestroyWindow(overlayHwnd);
     }
@@ -2471,6 +2462,7 @@ VirtSplitter::~VirtSplitter() {
 }
 
 void VirtSplitter::HideOverlay() {
+    ForgetDeadOverlay(overlayHwnd, brush);
     if (overlayHwnd) {
         ShowWindow(overlayHwnd, SW_HIDE);
     }
@@ -2486,6 +2478,7 @@ void VirtSplitter::UpdateOverlay() {
         bmp = CreateBitmap(8, 8, 1, 1, gDotPatternBmp);
         brush = CreatePatternBrush(bmp);
     }
+    ForgetDeadOverlay(overlayHwnd, brush);
     if (!overlayHwnd) {
         RegisterResizeOverlayClass();
         HWND owner = GetAncestor(hwnd, GA_ROOT);
@@ -2756,12 +2749,6 @@ int VirtText::MinIntrinsicWidth(int) {
     return GetIdealSize().dx;
 }
 
-Size VirtText::MinIntrinsicSize(int width, int height) {
-    int dx = MinIntrinsicWidth(height);
-    int dy = MinIntrinsicHeight(width);
-    return {dx, dy};
-}
-
 Size VirtText::GetIdealSize() {
     Size res = GetIdealSize(false);
     res.dx += padding.left + padding.right;
@@ -2902,16 +2889,18 @@ void VirtLink::Paint(VirtPaintCtx& ctx) {
     withUnderline = prevUnderline;
 }
 
-void VirtLink::OnMouseEnter() {
-    if (underlineOnHover) {
-        Invalidate();
+static void RepaintUnderline(VirtLink* link) {
+    if (link->underlineOnHover) {
+        link->Invalidate();
     }
 }
 
+void VirtLink::OnMouseEnter() {
+    RepaintUnderline(this);
+}
+
 void VirtLink::OnMouseLeave() {
-    if (underlineOnHover) {
-        Invalidate();
-    }
+    RepaintUnderline(this);
 }
 
 //--- VirtButton
@@ -3655,13 +3644,6 @@ VirtIconButton* AsVirtIconButton(ILayout* l) {
 VirtCloseButton* AsVirtCloseButton(ILayout* l) {
     if (l && l->GetKind() == kindVirtCtrlCloseButton) {
         return (VirtCloseButton*)l;
-    }
-    return nullptr;
-}
-
-VirtSlider* AsVirtSlider(ILayout* l) {
-    if (l && l->GetKind() == kindVirtCtrlSlider) {
-        return (VirtSlider*)l;
     }
     return nullptr;
 }
